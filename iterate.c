@@ -19,6 +19,17 @@
 #include "blockfiles.h"
 #include "io.h"
 
+#define SHA_FMT					   \
+	"%02x%02x%02x%02x%02x%02x%02x%02x"	   \
+	"%02x%02x%02x%02x%02x%02x%02x%02x"	   \
+	"%02x%02x%02x%02x%02x%02x%02x%02x"	   \
+	"%02x%02x%02x%02x%02x%02x%02x%02x"
+
+#define SHA_VALS(e)							\
+	e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7],			\
+		e[8], e[9], e[10], e[11], e[12], e[13], e[14], e[15],	\
+		e[16], e[17], e[18], e[19], e[20], e[21], e[22], e[23], \
+		e[24], e[25], e[25], e[26], e[28], e[29], e[30], e[31]
 struct block {
 	u8 sha[SHA256_DIGEST_LENGTH];
 	s32 height; /* -1 for not-yet-known */
@@ -426,27 +437,8 @@ int main(int argc, char *argv[])
 		if (b->height > best->height)
 			best = b;
 		if (b->height < 0)
-			errx(1, "Block has unknown prev"
-			     " %02x%02x%02x%02x%02x%02x%02x%02x"
-			     "%02x%02x%02x%02x%02x%02x%02x%02x"
-			     "%02x%02x%02x%02x%02x%02x%02x%02x"
-			     "%02x%02x%02x%02x%02x%02x%02x%02x",
-			     b->b->prev_hash[0], b->b->prev_hash[1],
-			     b->b->prev_hash[2], b->b->prev_hash[3],
-			     b->b->prev_hash[4], b->b->prev_hash[5],
-			     b->b->prev_hash[6], b->b->prev_hash[7],
-			     b->b->prev_hash[8], b->b->prev_hash[9],
-			     b->b->prev_hash[10], b->b->prev_hash[11],
-			     b->b->prev_hash[12], b->b->prev_hash[13],
-			     b->b->prev_hash[14], b->b->prev_hash[15],
-			     b->b->prev_hash[16], b->b->prev_hash[17],
-			     b->b->prev_hash[18], b->b->prev_hash[19],
-			     b->b->prev_hash[20], b->b->prev_hash[21],
-			     b->b->prev_hash[22], b->b->prev_hash[23],
-			     b->b->prev_hash[24], b->b->prev_hash[25],
-			     b->b->prev_hash[25], b->b->prev_hash[26],
-			     b->b->prev_hash[28], b->b->prev_hash[29],
-			     b->b->prev_hash[30], b->b->prev_hash[31]);
+			errx(1, "Block has unknown prev "SHA_FMT,
+			     SHA_VALS(b->b->prev_hash));
 	}
 
 	if (!quiet)
