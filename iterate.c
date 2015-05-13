@@ -79,6 +79,9 @@ struct utxo {
 
 	/* Offset within b->filenum */
 	off_t txoff;
+
+	/* Amount for each output. */
+	u64 amount[];
 };
 
 static const u8 *keyof_utxo(const struct utxo *utxo)
@@ -98,14 +101,20 @@ static void add_utxo(struct utxo_map *utxo_map,
 		     const struct bitcoin_transaction *t,
 		     u32 txnum, off_t off)
 {
-	struct utxo *utxo = tal(b, struct utxo);
+	struct utxo *utxo;
+	unsigned int i;
+
+	utxo = tal_alloc_(b, sizeof(*utxo) + sizeof(utxo->amount[0])
+			  * t->output_count, false, TAL_LABEL(struct utxo, ""));
 
 	memcpy(utxo->tx, t->sha256, sizeof(utxo->tx));
 	utxo->b = b;
 	utxo->txnum = txnum;
 	utxo->unspent_outputs = t->output_count;
 	utxo->txoff = off;
-	
+	for (i = 0; i < t->output_count; i++)
+		utxo->amount[i] = t->output[i].amount;
+
 	utxo_map_add(utxo_map, utxo);
 }
 
