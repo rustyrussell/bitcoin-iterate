@@ -54,7 +54,7 @@ static void pull_bytes(struct file *f, off_t *poff, void *dst, size_t num)
 
 static u32 pull_u32(struct file *f, off_t *poff)
 {
-	__le32 ret;
+	le32 ret;
 
 	pull_bytes(f, poff, &ret, sizeof(ret));
 	return le32_to_cpu(ret);
@@ -62,7 +62,7 @@ static u32 pull_u32(struct file *f, off_t *poff)
 
 static u64 pull_u64(struct file *f, off_t *poff)
 {
-	__le64 ret;
+	le64 ret;
 
 	pull_bytes(f, poff, &ret, sizeof(ret));
 	return le64_to_cpu(ret);

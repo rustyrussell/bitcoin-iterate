@@ -6,16 +6,11 @@
 /* We unpack varints for our in-memory representation */
 #define varint_t u64
 
-/* Readability markers. */
-#define __le64 u64
-#define __le32 u32
-#define __le16 u16
-
 /* These are little endian on disk. */
 struct bitcoin_block {
 	u32 D9B4BEF9;
 	u32 len;
-	u32 version; /* == 1 */
+	u32 version;
 	u8 prev_hash[32];
 	u8 merkle_hash[32];
 	u32 timestamp;
@@ -28,14 +23,15 @@ struct bitcoin_block {
 };
 
 struct bitcoin_transaction {
-	/* We calculate this as we read in transaction: */
-	u8 sha256[SHA256_DIGEST_LENGTH];
 	u32 version;
 	varint_t input_count;
 	struct bitcoin_transaction_input *input;
 	varint_t output_count;
 	struct bitcoin_transaction_output *output;
 	u32 lock_time;
+
+	/* We calculate these as we read in transaction: */
+	u8 sha256[SHA256_DIGEST_LENGTH];
 	u32 len;
 };
 
