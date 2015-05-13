@@ -1,0 +1,2 @@
+ccan/tal/str-Makefile: ccan/tal/str/str.h ccan/tal/str/str.c ccan/tal/str/_info
+ccan/tal/str.o: ccan/tal/str/str.o

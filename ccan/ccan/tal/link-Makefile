@@ -1,0 +1,2 @@
+ccan/tal/link-Makefile: ccan/tal/link/link.h ccan/tal/link/link.c ccan/tal/link/_info
+ccan/tal/link.o: ccan/tal/link/link.o

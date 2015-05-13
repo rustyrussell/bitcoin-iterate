@@ -1,0 +1,178 @@
+'\" t
+.\"     Title: bitcoin-iterate
+.\"    Author: [see the "AUTHOR" section]
+.\" Generator: DocBook XSL Stylesheets v1.78.1 <http://docbook.sf.net/>
+.\"      Date: 05/12/2015
+.\"    Manual: \ \&
+.\"    Source: \ \&
+.\"  Language: English
+.\"
+.TH "BITCOIN\-ITERATE" "1" "05/12/2015" "\ \&" "\ \&"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
+.\" -----------------------------------------------------------------
+.\" * set default formatting
+.\" -----------------------------------------------------------------
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.\" -----------------------------------------------------------------
+.\" * MAIN CONTENT STARTS HERE *
+.\" -----------------------------------------------------------------
+.SH "NAME"
+bitcoin-iterate \- Iterate over bitcoind\*(Aqs block files\&.
+.SH "SYNOPSIS"
+.sp
+\fBbitcoin\-iterate\fR [\fIOPTIONS\fR]
+.SH "DESCRIPTION"
+.sp
+\fBbitcoin\-iterate\fR creates a text dump of the blockchain contents, by directly reading \fBbitcoind\fR\*(Aqs block files\&. This is much faster than using \fBbitcoin\-cli\fR to query bitcoind directly, though \fBbitcoind\fR can provide more contextual metadata\&.
+.sp
+It iterates each block (from genesis to longest tip), and within that block iterates each transaction (from coinbase onwards in block order), and within that transaction iterates each input (in order), and then each output (in order)\&.
+.SH "OPTIONS"
+.PP
+\fB\-\-block\fR=\fIFORMAT\fR
+.RS 4
+Print out the format string for each block\&. Escape codes are prefixed with
+\fI%\fR:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+%bl: block length
+%bv: block version
+%bp: block prev hash as a 64\-character little\-endian hex string
+%bm: block merkle hash as a 64\-character little\-endian hex string
+%bs: block timestamp
+%bt: block target
+%bn: block nonce
+%bc: block transaction count
+%bh: block hash as a 64\-character little\-endian hex string
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+\fB\-\-tx,\-\-transaction\fR=\fIFORMAT\fR
+.RS 4
+Print out the format string for each transaction (in the order they are in the block)\&. All the block escape codes are valid, and the following additional ones:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+%th: transaction hash as a 64\-character little\-endian hex string
+%tv: transaction version
+%ti: transaction input count
+%to: transaction output count
+%tt: transaction locktime
+%tl: transaction length
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+\fB\-\-input\fR=\fIFORMAT\fR
+.RS 4
+Print out the format string for each transaction input (in the order they are in the transaction)\&. All the block and transaction escape codes are valid, and the following additional ones:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+%ih: input hash as a 64\-character\-little\-endian hex string
+%ii: input index
+%il: input script length
+%is: input script as a hex string
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+\fB\-\-output\fR=\fIFORMAT\fR
+.RS 4
+Print out the format string for each transaction output (in the order they are in the transaction)\&. All the block and transaction escape codes are valid, and the following additional ones:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+%oa: output amount
+%ol: output script length
+%os: output script as a hex string\&.
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+\fB\-q, \-\-quiet\fR
+.RS 4
+Don\(cqt print progress messages, just print the output\&. All progress messages are printed to standard output prefixed with "bitcoin\-iterate:" for easy filtering anyway\&.
+.RE
+.PP
+\fB\-\-blockdir\fR=\fIDIRECTORY\fR
+.RS 4
+Use this directory to find block files rather than ~/\&.bitcoin/blocks\&.
+.RE
+.PP
+\fB\-\-no\-mmap\fR
+.RS 4
+Use read, not mmap, on the block files\&. This may be slower\&.
+.RE
+.PP
+\fB\-h, \-\-help\fR
+.RS 4
+Print a brief help message, which is less useful than this manpage\&.
+.RE
+.SH "EXAMPLES"
+.PP
+\fBExample\ \&1.\ \&Simple sanity check: read blocks and do nothing\fR
+.sp
+bitcoin\-iterate
+.PP
+\fBExample\ \&2.\ \&Print out the height and length of every block, separated by a space\fR
+.sp
+bitcoin\-iterate \-\-block=\fI%bh %bl\fR
+.PP
+\fBExample\ \&3.\ \&Print out the block height and length of every transaction\fR
+.sp
+bitcoin\-iterate \-\-tx=\fIheight=%bh length=%tl\fR
+.PP
+\fBExample\ \&4.\ \&Print out the length of every scriptSig (input script)\fR
+.sp
+bitcoin\-iterate \-\-input=%il
+.PP
+\fBExample\ \&5.\ \&Print out the length of every scriptPubKey (output script).\fR
+.sp
+bitcoin\-iterate \-\-output=%ol
+.PP
+\fBExample\ \&6.\ \&Print out <block number>,<transaction hash>,<script> for each output\fR
+.sp
+bitcoin\-iterate \-\-output=%bn,%th,%os
+.SH "BUGS"
+.sp
+This manpage documents how it should work, not how it does work\&.
+.sp
+The chain of blocks to follow is determined solely by block height, which may not be the same as strongest chain in theoretical cases\&.
+.SH "AUTHOR"
+.sp
+Rusty Russell <rusty@rustcorp\&.com\&.au> wrote it, pulling in CCAN modules\&.
+.SH "RESOURCES"
+.sp
+Main web site: http://github\&.com/rustyrussell/bitcoin\-iterate
+.SH "COPYING"
+.sp
+This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version\&.

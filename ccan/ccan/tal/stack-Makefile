@@ -1,0 +1,2 @@
+ccan/tal/stack-Makefile: ccan/tal/stack/stack.c ccan/tal/stack/stack.h ccan/tal/stack/_info
+ccan/tal/stack.o: ccan/tal/stack/stack.o

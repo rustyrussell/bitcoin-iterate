@@ -1,0 +1,2 @@
+ccan/tal/path-Makefile: ccan/tal/path/path.h ccan/tal/path/path.c ccan/tal/path/_info
+ccan/tal/path.o: ccan/tal/path/path.o

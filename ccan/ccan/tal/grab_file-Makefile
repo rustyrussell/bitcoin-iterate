@@ -1,0 +1,2 @@
+ccan/tal/grab_file-Makefile: ccan/tal/grab_file/grab_file.h ccan/tal/grab_file/grab_file.c ccan/tal/grab_file/_info
+ccan/tal/grab_file.o: ccan/tal/grab_file/grab_file.o
