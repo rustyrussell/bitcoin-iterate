@@ -57,6 +57,7 @@ Print out the format string for each block\&. Escape codes are prefixed with
 %bn: block nonce
 %bc: block transaction count
 %bh: block hash as a 64\-character little\-endian hex string
+%bN: block height (0 == genesis)
 .fi
 .if n \{\
 .RE
@@ -77,6 +78,7 @@ Print out the format string for each transaction (in the order they are in the b
 %to: transaction output count
 %tt: transaction locktime
 %tl: transaction length
+%tN: transaction number within block
 .fi
 .if n \{\
 .RE
@@ -95,6 +97,7 @@ Print out the format string for each transaction input (in the order they are in
 %ii: input index
 %il: input script length
 %is: input script as a hex string
+%iN: input number within transaction
 .fi
 .if n \{\
 .RE
@@ -112,6 +115,7 @@ Print out the format string for each transaction output (in the order they are i
 %oa: output amount
 %ol: output script length
 %os: output script as a hex string\&.
+%oN: output number within transaction
 .fi
 .if n \{\
 .RE

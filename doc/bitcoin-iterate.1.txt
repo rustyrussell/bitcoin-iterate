@@ -40,6 +40,7 @@ OPTIONS
   %bn: block nonce
   %bc: block transaction count
   %bh: block hash as a 64-character little-endian hex string
+  %bN: block height (0 == genesis)
 
 *--tx,--transaction*='FORMAT'::
   Print out the format string for each transaction (in the order they
@@ -52,6 +53,7 @@ OPTIONS
   %to: transaction output count
   %tt: transaction locktime
   %tl: transaction length
+  %tN: transaction number within block
 
 *--input*='FORMAT'::
   Print out the format string for each transaction input (in the order
@@ -62,6 +64,7 @@ OPTIONS
   %ii: input index
   %il: input script length
   %is: input script as a hex string
+  %iN: input number within transaction
 
 *--output*='FORMAT'::
   Print out the format string for each transaction output (in the order
@@ -71,6 +74,7 @@ OPTIONS
   %oa: output amount
   %ol: output script length
   %os: output script as a hex string.
+  %oN: output number within transaction
 
 *-q, --quiet*::
   Don't print progress messages, just print the output.  All progress

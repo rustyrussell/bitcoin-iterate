@@ -173,6 +173,9 @@ static void print_format(const char *format,
 			case 'h':
 				print_hash(b->sha);
 				break;
+			case 'N':
+				printf("%u", b->height);
+				break;
 			default:
 				goto bad_fmt;
 			}
@@ -199,6 +202,9 @@ static void print_format(const char *format,
 			case 'l':
 				printf("%u", t->len);
 				break;
+			case 'N':
+				printf("%zu", t - b->b->transaction);
+				break;
 			default:
 				goto bad_fmt;
 			}
@@ -219,6 +225,9 @@ static void print_format(const char *format,
 			case 's':
 				print_hex(i->script, i->script_length);
 				break;
+			case 'N':
+				printf("%zu", i - t->input);
+				break;
 			default:
 				goto bad_fmt;
 			}
@@ -235,6 +244,9 @@ static void print_format(const char *format,
 				break;
 			case 's':
 				print_hex(o->script, o->script_length);
+				break;
+			case 'N':
+				printf("%zu", o - t->output);
 				break;
 			default:
 				goto bad_fmt;
@@ -283,6 +295,7 @@ int main(int argc, char *argv[])
 			   "  %bn: block nonce\n"
 			   "  %bc: block transaction count\n"
 			   "  %bh: block hash\n"
+			   "  %bN: block height\n"
 			   "Valid transaction, input or output format:\n"
 			   "  %th: transaction hash\n"
 			   "  %tv: transaction version\n"
@@ -290,15 +303,18 @@ int main(int argc, char *argv[])
 			   "  %to: transaction output count\n"
 			   "  %tt: transaction locktime\n"
 			   "  %tl: transaction length\n"
+			   "  %tN: transaction number\n"
 			   "Valid input format:\n"
 			   "  %ih: input hash\n"
 			   "  %ii: input index\n"
 			   "  %il: input script length\n"
 			   "  %is: input script as a hex string\n"
+			   "  %iN: input number\n"
 			   "Valid output format:\n"
 			   "  %oa: output amount\n"
 			   "  %ol: output script length\n"
-			   "  %os: output script as a hex string.",
+			   "  %os: output script as a hex string."
+			   "  %oN: output number\n",
 			   "Display help message");
 	opt_register_arg("--block", opt_set_charp, NULL, &blockfmt,
 			   "Format to print for each block");
