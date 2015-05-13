@@ -420,6 +420,7 @@ int main(int argc, char *argv[])
 	char *blockdir = NULL;
 	struct block_map_iter it;
 	struct utxo_map utxo_map;
+	unsigned progress_marks = 0;
 
 	err_set_progname(argv[0]);
 	opt_register_noarg("-h|--help", opt_usage_and_exit,
@@ -464,6 +465,8 @@ int main(int argc, char *argv[])
 			   "Format to print for each transaction input");
 	opt_register_arg("--output", opt_set_charp, NULL, &outputfmt,
 			   "Format to print for each transaction output");
+	opt_register_arg("--progress", opt_set_uintval, NULL,
+			 &progress_marks, "Print . to stderr this many times");
 	opt_register_noarg("--no-mmap", opt_set_invbool, &use_mmap,
 			   "Don't mmap the block files");
 	opt_register_noarg("--quiet|-q", opt_set_bool, &quiet,
@@ -586,6 +589,11 @@ int main(int argc, char *argv[])
 
 		if (blockfmt)
 			print_format(blockfmt, NULL, b, NULL, 0, NULL, NULL);
+
+		if (progress_marks
+		    && b->height % (best->height / progress_marks)
+		    == (best->height / progress_marks) - 1)
+			fprintf(stderr, ".");
 
 		/* Don't read transactions if we don't have to */
 		if (!txfmt && !inputfmt && !outputfmt && !needs_utxo)
