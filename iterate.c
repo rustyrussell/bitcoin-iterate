@@ -54,6 +54,24 @@ HTABLE_DEFINE_TYPE(struct block, keyof_block_map, hash_block, block_eq,
 
 #define CHUNK (128 * 1024 * 1024)
 
+static bool use_mmap = true;
+static char **block_fnames;
+
+/* Cache file opens; we only open one at a time anyway. */
+static struct file *block_file(unsigned int index)
+{
+	static struct file f;
+
+	if (f.name != block_fnames[index]) {
+		if (f.name)
+			file_close(&f);
+		file_open(&f, block_fnames[index], 0,
+			  O_RDONLY | (use_mmap ? 0 : O_NO_MMAP));
+	}
+	return &f;
+}
+
+
 static bool is_zero(u8 hash[SHA256_DIGEST_LENGTH])
 {
 	unsigned int i;
@@ -270,17 +288,14 @@ bad_fmt:
 int main(int argc, char *argv[])
 {
 	void *tal_ctx = tal(NULL, char);
-	char **names;
 	char *blockfmt = NULL, *txfmt = NULL,
 		*inputfmt = NULL, *outputfmt = NULL;
 	size_t i, block_count = 0;
 	off_t last_discard;
-	bool mmap = true, quiet = false;
-	int oflags = O_RDONLY;
+	bool quiet = false;
 	struct block *b, *best, *genesis = NULL, *next;
 	struct block_map block_map;
 	char *blockdir = NULL;
-	struct file f;
 	struct block_map_iter it;
 
 	err_set_progname(argv[0]);
@@ -325,7 +340,7 @@ int main(int argc, char *argv[])
 			   "Format to print for each transaction input");
 	opt_register_arg("--output", opt_set_charp, NULL, &outputfmt,
 			   "Format to print for each transaction output");
-	opt_register_noarg("--no-mmap", opt_set_invbool, &mmap,
+	opt_register_noarg("--no-mmap", opt_set_invbool, &use_mmap,
 			   "Don't mmap the block files");
 	opt_register_noarg("--quiet|-q", opt_set_bool, &quiet,
 			 "Don't output progress information");
@@ -333,41 +348,39 @@ int main(int argc, char *argv[])
 			 "Block directory instead of ~/.bitcoin/blocks");
 	opt_parse(&argc, argv, opt_log_stderr_exit);
 
-	if (!mmap)
-		oflags |= O_NO_MMAP;
-
 	if (argc != 1)
 		opt_usage_and_exit(NULL);
 
 	block_map_init(&block_map);
-	names = block_filenames(tal_ctx, blockdir);
-	for (i = 0; i < tal_count(names); i++) {
+	block_fnames = block_filenames(tal_ctx, blockdir);
+
+	for (i = 0; i < tal_count(block_fnames); i++) {
 		off_t off = 0;
 
 		/* new-style starts from 1, old-style starts from 0 */
-		if (!names[i]) {
+		if (!block_fnames[i]) {
 			if (i)
 				warnx("Missing block info for %zu", i);
 			continue;
 		}
-		file_open(&f, names[i], 0, oflags);
 
 		if (!quiet)
 			printf("bitcoin-iterate: processing %s (%zi/%zu)\n",
-			       names[i], i+1, tal_count(names));
+			       block_fnames[i], i+1, tal_count(block_fnames));
 
 		last_discard = off = 0;
 		for (;;) {
 			off_t block_start;
+			struct file *f = block_file(i);
 
-			if (!next_block_header_prefix(&f, &off))
+			if (!next_block_header_prefix(f, &off))
 				break;
 
 			block_start = off;
 			b = tal(tal_ctx, struct block);
 			b->filenum = i;
 			b->height = -1;
-			b->b = read_bitcoin_block_header(tal_ctx, &f, &off,
+			b->b = read_bitcoin_block_header(tal_ctx, f, &off,
 							 b->sha);
 			if (!b->b) {
 				tal_free(b);
@@ -389,17 +402,16 @@ int main(int argc, char *argv[])
 			}
 
 			skip_bitcoin_transactions(b->b, block_start, &off);
-			if (off > last_discard + CHUNK && f.mmap) {
+			if (off > last_discard + CHUNK && f->mmap) {
 				size_t len = CHUNK;
-				if ((size_t)last_discard + len > f.len)
-					len = f.len - last_discard;
-				madvise(f.mmap + last_discard, len,
+				if ((size_t)last_discard + len > f->len)
+					len = f->len - last_discard;
+				madvise(f->mmap + last_discard, len,
 					MADV_DONTNEED);
 				last_discard += len;
 			}
 			block_count++;
 		}
-		file_close(&f);
 	}
 
 	if (!genesis)
@@ -448,8 +460,6 @@ int main(int argc, char *argv[])
 		next = b;
 	}
 		
-	f.name = NULL;
-
 	/* Now run forwards. */
 	for (b = genesis; b; b = b->next) {
 		off_t off;
@@ -462,19 +472,14 @@ int main(int argc, char *argv[])
 		if (!txfmt && !inputfmt && !outputfmt)
 			continue;
 
-		/* A bit of caching on the file descriptor goes a long way */
-		if (f.name != names[b->filenum]) {
-			if (f.name)
-				file_close(&f);
-			file_open(&f, names[b->filenum], 0, oflags);
-		}
 		off = b->pos;
 
 		for (i = 0; i < b->b->transaction_count; i++) {
 			size_t j;
 			struct bitcoin_transaction tx;
 
-			read_bitcoin_transaction(tal_ctx, &tx, &f, &off);
+			read_bitcoin_transaction(tal_ctx, &tx,
+						 block_file(b->filenum), &off);
 
 			if (txfmt)
 				print_format(txfmt, b, &tx, i, NULL, NULL);
