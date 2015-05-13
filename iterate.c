@@ -284,7 +284,7 @@ int main(int argc, char *argv[])
 
 	err_set_progname(argv[0]);
 	opt_register_noarg("-h|--help", opt_usage_and_exit,
-			   "Valid block, transaction, input or output format:\n"
+			   "\nValid block, transaction, input or output format:\n"
 			   "  <literal>: unquoted\n"
 			   "  %bl: block length\n"
 			   "  %bv: block version\n"
