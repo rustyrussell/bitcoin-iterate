@@ -12,10 +12,11 @@ struct bitcoin_block *read_bitcoin_block_header(tal_t *ctx,
 						u8 block_md[SHA256_DIGEST_LENGTH]);
 
 /* Step 3: Either skip all the transactions, or... */
-void skip_bitcoin_transactions(struct bitcoin_block *b,
+void skip_bitcoin_transactions(const struct bitcoin_block *b,
 			       off_t block_start, off_t *off);
 
-/* ... read them all in. */
-void read_bitcoin_transactions(struct bitcoin_block *b,
-			       struct file *f, off_t *off);
+/* ... read them in (call this repeatedly). Allocates off ctx. */
+void read_bitcoin_transaction(const void *ctx,
+			      struct bitcoin_transaction *t,
+			      struct file *f, off_t *off);
 #endif /* BITCOIN_PARSE_PARSE_H */

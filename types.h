@@ -17,9 +17,6 @@ struct bitcoin_block {
 	u32 target;
 	u32 nonce;
 	varint_t transaction_count;
-
-	/* These we calculate. */
-	struct bitcoin_transaction *transaction;
 };
 
 struct bitcoin_transaction {

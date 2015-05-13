@@ -132,6 +132,7 @@ static void print_hex(const u8 *data, size_t len)
 static void print_format(const char *format,
 			 struct block *b,
 			 struct bitcoin_transaction *t,
+			 size_t transaction_num,
 			 struct bitcoin_transaction_input *i,
 			 struct bitcoin_transaction_output *o)
 {
@@ -203,7 +204,7 @@ static void print_format(const char *format,
 				printf("%u", t->len);
 				break;
 			case 'N':
-				printf("%zu", t - b->b->transaction);
+				printf("%zu", transaction_num);
 				break;
 			default:
 				goto bad_fmt;
@@ -452,9 +453,10 @@ int main(int argc, char *argv[])
 	/* Now run forwards. */
 	for (b = genesis; b; b = b->next) {
 		off_t off;
+		void *tal_ctx = tal_arr(b, char, 0);
 
 		if (blockfmt)
-			print_format(blockfmt, b, NULL, NULL, NULL);
+			print_format(blockfmt, b, NULL, 0, NULL, NULL);
 
 		/* Don't read transactions if we don't have to */
 		if (!txfmt && !inputfmt && !outputfmt)
@@ -467,27 +469,28 @@ int main(int argc, char *argv[])
 			file_open(&f, names[b->filenum], 0, oflags);
 		}
 		off = b->pos;
-		read_bitcoin_transactions(b->b, &f, &off);
 
 		for (i = 0; i < b->b->transaction_count; i++) {
 			size_t j;
-			struct bitcoin_transaction *tx = &b->b->transaction[i];
+			struct bitcoin_transaction tx;
+
+			read_bitcoin_transaction(tal_ctx, &tx, &f, &off);
 
 			if (txfmt)
-				print_format(txfmt, b, tx, NULL, NULL);
+				print_format(txfmt, b, &tx, i, NULL, NULL);
 
 			if (inputfmt) {
-				for (j = 0; j < tx->input_count; j++)
-					print_format(inputfmt, b, tx,
-						     &tx->input[j], NULL);
+				for (j = 0; j < tx.input_count; j++)
+					print_format(inputfmt, b, &tx, i,
+						     &tx.input[j], NULL);
 			}
 			if (outputfmt) {
-				for (j = 0; j < tx->output_count; j++)
-					print_format(outputfmt, b, tx,
-						     NULL, &tx->output[j]);
+				for (j = 0; j < tx.output_count; j++)
+					print_format(outputfmt, b, &tx, i,
+						     NULL, &tx.output[j]);
 			}
 		}
-		tal_free(b->b->transaction);
+		tal_free(tal_ctx);
 	}
 	return 0;
 }

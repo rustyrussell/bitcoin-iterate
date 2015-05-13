@@ -93,8 +93,9 @@ static void read_output(const tal_t *ctx, struct file *f, off_t *poff,
 	pull_bytes(f, poff, output->script, output->script_length);
 }
 
-static void read_transaction(const tal_t *ctx, struct file *f, off_t *poff,
-			     struct bitcoin_transaction *trans)
+void read_bitcoin_transaction(const tal_t *ctx,
+			      struct bitcoin_transaction *trans,
+			      struct file *f, off_t *poff)
 {
 	size_t i;
 	off_t start = *poff;
@@ -192,26 +193,13 @@ read_bitcoin_block_header(tal_t *ctx,
 	SHA256_Final(block_md, &sha256);
 
 	block->transaction_count = pull_varint(f, off);
-	block->transaction = NULL;
 
 	return block;
 }
 
-void skip_bitcoin_transactions(struct bitcoin_block *b,
+void skip_bitcoin_transactions(const struct bitcoin_block *b,
 			       off_t block_start,
 			       off_t *off)
 {
-	b->transaction = NULL;
 	*off = block_start + 8 + b->len;
-}
-
-void read_bitcoin_transactions(struct bitcoin_block *b,
-			       struct file *f, off_t *off)
-{
-	size_t i;
-
-	b->transaction = tal_arr(b, struct bitcoin_transaction,
-				 b->transaction_count);
-	for (i = 0; i < b->transaction_count; i++)
-		read_transaction(b, f, off, b->transaction + i);
 }
