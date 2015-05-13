@@ -27,6 +27,8 @@ struct block {
 	/* Position of first transaction */
 	off_t pos;
 	struct bitcoin_block *b;
+	/* So we can iterate forwards. */
+	struct block *next;
 };
 
 /* Hash blocks by sha */
@@ -262,7 +264,7 @@ int main(int argc, char *argv[])
 	off_t last_discard;
 	bool mmap = true, quiet = false;
 	int oflags = O_RDONLY;
-	struct block *b, *best, *genesis = NULL;
+	struct block *b, *best, *genesis = NULL, *next;
 	struct block_map block_map;
 	char *blockdir = NULL;
 	struct file f;
@@ -418,14 +420,21 @@ int main(int argc, char *argv[])
 			     b->b->prev_hash[30], b->b->prev_hash[31]);
 	}
 
-	/* Now iterate down from best... */
 	if (!quiet)
 		printf("bitcoin-iterate: best block height: %u (of %zu)\n",
 		       best->height, block_count);
 
+	/* Now iterate down from best, setting next pointers. */
+	next = NULL;
+	for (b = best; b; b = block_map_get(&block_map, b->b->prev_hash)) {
+		b->next = next;
+		next = b;
+	}
+		
 	f.name = NULL;
 
-	for (b = best; b; b = block_map_get(&block_map, b->b->prev_hash)) {
+	/* Now run forwards. */
+	for (b = genesis; b; b = b->next) {
 		off_t off;
 
 		if (blockfmt)
