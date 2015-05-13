@@ -53,6 +53,7 @@ OPTIONS
   %to: transaction output count
   %tt: transaction locktime
   %tl: transaction length
+  %tF: transaction fee paid by block (negative for coinbase reward)
   %tN: transaction number within block
 
 *--input*='FORMAT'::
