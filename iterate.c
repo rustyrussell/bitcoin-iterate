@@ -313,8 +313,8 @@ int main(int argc, char *argv[])
 			   "Valid output format:\n"
 			   "  %oa: output amount\n"
 			   "  %ol: output script length\n"
-			   "  %os: output script as a hex string."
-			   "  %oN: output number\n",
+			   "  %os: output script as a hex string\n"
+			   "  %oN: output number",
 			   "Display help message");
 	opt_register_arg("--block", opt_set_charp, NULL, &blockfmt,
 			   "Format to print for each block");
