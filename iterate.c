@@ -164,7 +164,7 @@ static bool is_zero(u8 hash[SHA256_DIGEST_LENGTH])
 	return true;
 }
 
-static s32 get_height(struct block_map *block_map, struct block *b)
+static s32 get_height(struct block_map *block_map, struct block *b, bool failok)
 {
 	struct block *prev;
 	s32 h;
@@ -173,10 +173,14 @@ static s32 get_height(struct block_map *block_map, struct block *b)
 		return b->height;
 
 	prev = block_map_get(block_map, b->b->prev_hash);
-	if (!prev)
+	if (!prev) {
+		if (!failok)
+			errx(1, "Block has unknown prev "SHA_FMT,
+			     SHA_VALS(b->b->prev_hash));
 		return -1;
+	}
 
-	h = get_height(block_map, prev);
+	h = get_height(block_map, prev, failok);
 	if (h >= 0)
 		return h+1;
 	return h;
@@ -534,7 +538,7 @@ int main(int argc, char *argv[])
 				 * in practice blocks are approx in
 				 * order, so this is quite
 				 * efficient. */
-				b->height = get_height(&block_map, b);
+				b->height = get_height(&block_map, b, true);
 			}
 
 			skip_bitcoin_transactions(b->b, block_start, &off);
@@ -558,12 +562,9 @@ int main(int argc, char *argv[])
 	for (b = block_map_first(&block_map, &it);
 	     b;
 	     b = block_map_next(&block_map, &it)) {
-		b->height = get_height(&block_map, b);
+		b->height = get_height(&block_map, b, false);
 		if (b->height > best->height)
 			best = b;
-		if (b->height < 0)
-			errx(1, "Block has unknown prev "SHA_FMT,
-			     SHA_VALS(b->b->prev_hash));
 	}
 
 	if (!quiet)
