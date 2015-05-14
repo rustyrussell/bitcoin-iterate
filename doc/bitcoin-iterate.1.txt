@@ -77,10 +77,20 @@ OPTIONS
   %os: output script as a hex string.
   %oN: output number within transaction
 
+*--end*::
+  Stop iteration at this block hash.
+
+*--start*::
+  Start iteration at this block hash.
+
 *-q, --quiet*::
   Don't print progress messages, just print the output.  All progress
   messages are printed to standard output prefixed with
   "bitcoin-iterate:" for easy filtering anyway.
+
+*--progress*='NUM-CHARS'::
+  Print '.' to standard error such that at there will be this many drawn
+  at completion.
 
 *--blockdir*='DIRECTORY'::
   Use this directory to find block files rather than ~/.bitcoin/blocks.

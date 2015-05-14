@@ -7,6 +7,7 @@
 #include <ccan/htable/htable_type.h>
 #include <ccan/rbuf/rbuf.h>
 #include <ccan/tal/str/str.h>
+#include <ccan/str/hex/hex.h>
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -186,40 +187,11 @@ static s32 get_height(struct block_map *block_map, struct block *b, bool failok)
 	return h;
 }
 
-static char hexchar(unsigned int val)
-{
-	if (val < 10)
-		return '0' + val;
-	if (val < 16)
-		return 'a' + val - 10;
-	abort();
-}
-
-static size_t to_hex_direct(char *dest, size_t destlen,
-			    const void *buf, size_t bufsize)
-{
-	size_t used = 0;
-
-	/* Need room for nul terminator */
-	assert(destlen > 0);
-
-	while (destlen >= 3 && used < bufsize) {
-		unsigned int c = ((const unsigned char *)buf)[used];
-		*(dest++) = hexchar(c >> 4);
-		*(dest++) = hexchar(c & 0xF);
-		destlen -= 2;
-		used++;
-	}
-	*dest = '\0';
-
-	return used;
-}
-
 static void print_hash(const u8 *hash)
 {
-	char str[SHA256_DIGEST_LENGTH * 2 + 1];
+	char str[hex_str_size(SHA256_DIGEST_LENGTH)];
 
-	to_hex_direct(str, sizeof(str), hash, SHA256_DIGEST_LENGTH);
+	hex_encode(hash, SHA256_DIGEST_LENGTH, str, sizeof(str));
 	fputs(str, stdout);
 }
 
@@ -227,7 +199,7 @@ static void print_hex(const u8 *data, size_t len)
 {
 	char str[len * 2 + 1];
 
-	to_hex_direct(str, sizeof(str), data, len);
+	hex_encode(data, len, str, sizeof(str));
 	fputs(str, stdout);
 }
 
@@ -420,6 +392,13 @@ bad_fmt:
 	     c);
 }
 
+static char *opt_set_hash(const char *arg, u8 *h)
+{
+	if (!hex_decode(arg, strlen(arg), h, SHA256_DIGEST_LENGTH))
+		return "Bad hex string (needs 64 hex chars)";
+	return NULL;
+}
+
 int main(int argc, char *argv[])
 {
 	void *tal_ctx = tal(NULL, char);
@@ -428,12 +407,14 @@ int main(int argc, char *argv[])
 	size_t i, block_count = 0;
 	off_t last_discard;
 	bool quiet = false, needs_utxo;
-	struct block *b, *best, *genesis = NULL, *next;
+	struct block *b, *best, *genesis = NULL, *next, *start = NULL;
 	struct block_map block_map;
 	char *blockdir = NULL;
 	struct block_map_iter it;
 	struct utxo_map utxo_map;
 	unsigned progress_marks = 0;
+	u8 tip[SHA256_DIGEST_LENGTH] = { 0 },
+		start_hash[SHA256_DIGEST_LENGTH] = { 0 };
 
 	err_set_progname(argv[0]);
 	opt_register_noarg("-h|--help", opt_usage_and_exit,
@@ -486,6 +467,10 @@ int main(int argc, char *argv[])
 			 "Don't output progress information");
 	opt_register_arg("--blockdir", opt_set_charp, NULL, &blockdir,
 			 "Block directory instead of ~/.bitcoin/blocks");
+	opt_register_arg("--end", opt_set_hash, NULL, tip,
+			 "Best blockhash to use instead of longest chain.");
+	opt_register_arg("--start", opt_set_hash, NULL, start_hash,
+			 "Blockhash to start at instead of genesis.");
 	opt_parse(&argc, argv, opt_log_stderr_exit);
 
 	if (argc != 1)
@@ -567,6 +552,21 @@ int main(int argc, char *argv[])
 			best = b;
 	}
 
+	/* If they told us a tip, that overrides. */
+	if (!is_zero(tip)) {
+		best = block_map_get(&block_map, tip);
+		if (!best)
+			errx(1, "Unknown --end block "SHA_FMT, SHA_VALS(tip));
+	}
+			
+	/* If they told us a start, make sure it exists. */
+	if (!is_zero(start_hash)) {
+		start = block_map_get(&block_map, start_hash);
+		if (!start)
+			errx(1, "Unknown --start block "SHA_FMT,
+			     SHA_VALS(start_hash));
+	}
+
 	if (!quiet)
 		printf("bitcoin-iterate: best block height: %u (of %zu)\n",
 		       best->height, block_count);
@@ -596,6 +596,12 @@ int main(int argc, char *argv[])
 	for (b = genesis; b; b = b->next) {
 		off_t off;
 		struct bitcoin_transaction *tx;
+
+		if (start) {
+			if (b != start)
+				continue;
+			start = NULL;
+		}
 
 		if (blockfmt)
 			print_format(blockfmt, NULL, b, NULL, 0, NULL, NULL);
