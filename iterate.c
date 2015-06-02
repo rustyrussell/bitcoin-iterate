@@ -165,26 +165,29 @@ static bool is_zero(u8 hash[SHA256_DIGEST_LENGTH])
 	return true;
 }
 
-static s32 get_height(struct block_map *block_map, struct block *b, bool failok)
+static void set_height(struct block_map *block_map, struct block *b)
 {
-	struct block *prev;
-	s32 h;
+	struct block *i, *prev;
 
 	if (b->height != -1)
-		return b->height;
+		return;
 
-	prev = block_map_get(block_map, b->b->prev_hash);
-	if (!prev) {
-		if (!failok)
+	i = b;
+	do {
+		prev = block_map_get(block_map, i->b->prev_hash);
+		if (!prev)
 			errx(1, "Block has unknown prev "SHA_FMT,
-			     SHA_VALS(b->b->prev_hash));
-		return -1;
-	}
+			     SHA_VALS(i->b->prev_hash));
+		prev->next = i;
+		i = prev;
+	} while (i->height == -1);
 
-	h = get_height(block_map, prev, failok);
-	if (h >= 0)
-		return h+1;
-	return h;
+	/* Now iterate forward, setting height for all. */
+	b->next = NULL;
+	for (i = prev->next; i; i = i->next) {
+		i->height = prev->height + 1;
+		prev = i;
+	}
 }
 
 static void print_hash(const u8 *hash)
@@ -517,13 +520,6 @@ int main(int argc, char *argv[])
 			if (is_zero(b->b->prev_hash)) {
 				genesis = b;
 				b->height = 0;
-			} else if (genesis) {
-				/* We could do this all at the end,
-				 * but that means massive recursion;
-				 * in practice blocks are approx in
-				 * order, so this is quite
-				 * efficient. */
-				b->height = get_height(&block_map, b, true);
 			}
 
 			skip_bitcoin_transactions(b->b, block_start, &off);
@@ -542,12 +538,12 @@ int main(int argc, char *argv[])
 	if (!genesis)
 		errx(1, "Could not find a genesis block.");
 
-	/* In case we missed some. */
+	/* Link up prevs. */
 	best = genesis;
 	for (b = block_map_first(&block_map, &it);
 	     b;
 	     b = block_map_next(&block_map, &it)) {
-		b->height = get_height(&block_map, b, false);
+		set_height(&block_map, b);
 		if (b->height > best->height)
 			best = b;
 	}
