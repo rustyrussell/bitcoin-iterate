@@ -31,6 +31,16 @@ transaction-nospam.csv: outputs-nospam.csv
 transaction-min-%.csv: outputs.csv
 	awk -F, 'BEGIN { PREVB=0; PREVTX=0; LEN=0; TOO_LOW=0 } { if ($$1","$$2 != PREVB","PREVTX) { if (TOO_LOW <= 1 || PREVTX == 0) print PREVB","PREVTX","LEN; TOO_LOW=0; PREVB=$$1; PREVTX=$$2} LEN=$$3; if ($$4 < $*) TOO_LOW++; }' < $< > $@
 
+# Now, keep txs which have 0 or 1 outputs < minimum => [blockheight,txnum,len]
+# Always keep coinbases.
+transaction-min-%.csv: outputs.csv
+	awk -F, 'BEGIN { PREVB=0; PREVTX=0; LEN=0; TOO_LOW=0 } { if ($$1","$$2 != PREVB","PREVTX) { if (TOO_LOW <= 1 || PREVTX == 0) print PREVB","PREVTX","LEN; TOO_LOW=0; PREVB=$$1; PREVTX=$$2} LEN=$$3; if ($$4 < $*) TOO_LOW++; }' < $< > $@
+
+# Now, keep txs which have any output < minimum => [blockheight,txnum,len]
+# Always keep coinbases.
+transaction-any-%.csv: outputs.csv
+	awk -F, 'BEGIN { PREVB=0; PREVTX=0; LEN=0; TOO_LOW=0 } { if ($$1","$$2 != PREVB","PREVTX) { if (TOO_LOW == 0 || PREVTX == 0) print PREVB","PREVTX","LEN; TOO_LOW=0; PREVB=$$1; PREVTX=$$2} LEN=$$3; if ($$4 < $*) TOO_LOW++; }' < $< > $@
+
 # Now recalculate block sizes by summing transactions => [len]
 blocks-%.csv: transaction-%.csv
 	(echo '$*'; awk -F, 'BEGIN { PREV="0"; LEN=$(BLOCK_HDRLEN) } { if ($$1 != PREV) { print LEN; PREV=$$1; LEN=$(BLOCK_HDRLEN);} LEN+=$$3 }' < $<) > $@
@@ -47,5 +57,5 @@ grouped-$(GROUP_SIZE)-%.csv: %.csv
 blocksize-variants.csv: normal-blocksize.csv blocks-min-5000.csv blocks-min-50000.csv blocks-min-500000.csv blocks-min-1000000.csv blocks-min-5000000.csv blocks-min-10000000.csv blocks-nospam.csv
 	(echo 'Block height'; seq 0 `wc -l < $<`) | paste -d, - $^ > $@
 
-blocksize-variants-grouped-%.csv: grouped-%-normal-blocksize.csv grouped-%-blocks-min-5000.csv grouped-%-blocks-min-50000.csv grouped-%-blocks-min-500000.csv grouped-%-blocks-min-1000000.csv grouped-%-blocks-min-5000000.csv grouped-%-blocks-min-10000000.csv grouped-%-blocks-nospam.csv
+blocksize-variants-grouped-%.csv: grouped-%-normal-blocksize.csv grouped-%-blocks-min-5000.csv grouped-%-blocks-min-50000.csv grouped-%-blocks-min-500000.csv grouped-%-blocks-min-1000000.csv grouped-%-blocks-min-5000000.csv grouped-%-blocks-min-10000000.csv grouped-%-blocks-nospam.csv grouped-%-blocks-any-50000.csv grouped-%-blocks-any-5000.csv grouped-%-blocks-any-50000.csv grouped-%-blocks-any-500000.csv
 	(echo 'Block height'; seq 0 $* $$((`wc -l < $<` * $*)) ) | paste -d, - $^ > $@
