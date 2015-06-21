@@ -41,6 +41,7 @@ OPTIONS
   %bc: block transaction count
   %bh: block hash as a 64-character little-endian hex string
   %bN: block height (0 == genesis)
+  %bH: block header as a hex string
 
 *--tx,--transaction*='FORMAT'::
   Print out the format string for each transaction (in the order they
@@ -55,6 +56,7 @@ OPTIONS
   %tl: transaction length
   %tF: transaction fee paid by block (negative for coinbase reward)
   %tN: transaction number within block
+  %tX: transaction as a hex string (including inputs and outputs)
 
 *--input*='FORMAT'::
   Print out the format string for each transaction input (in the order
@@ -66,6 +68,7 @@ OPTIONS
   %il: input script length
   %is: input script as a hex string
   %iN: input number within transaction
+  %iX: input as a hex string
 
 *--output*='FORMAT'::
   Print out the format string for each transaction output (in the order
@@ -76,6 +79,7 @@ OPTIONS
   %ol: output script length
   %os: output script as a hex string.
   %oN: output number within transaction
+  %oX: output as a hex string
 
 *--end*::
   Stop iteration at this block hash.

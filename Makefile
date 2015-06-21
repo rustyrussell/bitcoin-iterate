@@ -1,4 +1,4 @@
-ITERATE_OBJS := iterate.o parse.o blockfiles.o io.o
+ITERATE_OBJS := iterate.o parse.o blockfiles.o io.o dump.o
 #CCAN_OBJS := ccan-asort.o ccan-breakpoint.o ccan-tal.o ccan-tal-path.o ccan-tal-str.o ccan-take.o ccan-list.o ccan-str.o ccan-opt-helpers.o ccan-opt.o ccan-opt-parse.o ccan-opt-usage.o ccan-htable.o ccan-rbuf.o
 CCAN_OBJS := ccan-tal.o ccan-tal-path.o ccan-tal-str.o ccan-take.o ccan-list.o ccan-str.o ccan-opt-helpers.o ccan-opt.o ccan-opt-parse.o ccan-opt-usage.o ccan-htable.o ccan-rbuf.o ccan-hex.o
 CCANDIR=ccan/

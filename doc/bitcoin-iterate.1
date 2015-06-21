@@ -2,12 +2,12 @@
 .\"     Title: bitcoin-iterate
 .\"    Author: [see the "AUTHOR" section]
 .\" Generator: DocBook XSL Stylesheets v1.78.1 <http://docbook.sf.net/>
-.\"      Date: 05/14/2015
+.\"      Date: 06/21/2015
 .\"    Manual: \ \&
 .\"    Source: \ \&
 .\"  Language: English
 .\"
-.TH "BITCOIN\-ITERATE" "1" "05/14/2015" "\ \&" "\ \&"
+.TH "BITCOIN\-ITERATE" "1" "06/21/2015" "\ \&" "\ \&"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -58,6 +58,7 @@ Print out the format string for each block\&. Escape codes are prefixed with
 %bc: block transaction count
 %bh: block hash as a 64\-character little\-endian hex string
 %bN: block height (0 == genesis)
+%bH: block header as a hex string
 .fi
 .if n \{\
 .RE
@@ -80,6 +81,7 @@ Print out the format string for each transaction (in the order they are in the b
 %tl: transaction length
 %tF: transaction fee paid by block (negative for coinbase reward)
 %tN: transaction number within block
+%tX: transaction as a hex string (including inputs and outputs)
 .fi
 .if n \{\
 .RE
@@ -99,6 +101,7 @@ Print out the format string for each transaction input (in the order they are in
 %il: input script length
 %is: input script as a hex string
 %iN: input number within transaction
+%iX: input as a hex string
 .fi
 .if n \{\
 .RE
@@ -117,6 +120,7 @@ Print out the format string for each transaction output (in the order they are i
 %ol: output script length
 %os: output script as a hex string\&.
 %oN: output number within transaction
+%oX: output as a hex string
 .fi
 .if n \{\
 .RE

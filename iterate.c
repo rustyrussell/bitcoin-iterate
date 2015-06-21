@@ -19,6 +19,7 @@
 #include "parse.h"
 #include "blockfiles.h"
 #include "io.h"
+#include "dump.h"
 
 #define SHA_FMT					   \
 	"%02x%02x%02x%02x%02x%02x%02x%02x"	   \
@@ -190,22 +191,6 @@ static void set_height(struct block_map *block_map, struct block *b)
 	}
 }
 
-static void print_hash(const u8 *hash)
-{
-	char str[hex_str_size(SHA256_DIGEST_LENGTH)];
-
-	hex_encode(hash, SHA256_DIGEST_LENGTH, str, sizeof(str));
-	fputs(str, stdout);
-}
-
-static void print_hex(const u8 *data, size_t len)
-{
-	char str[len * 2 + 1];
-
-	hex_encode(data, len, str, sizeof(str));
-	fputs(str, stdout);
-}
-
 /* This is kind of silly, since they can print it and sum it
  * themselves.  But convenient though... */
 static s64 calculate_fees(const struct utxo_map *utxo_map,
@@ -301,6 +286,9 @@ static void print_format(const char *format,
 			case 'N':
 				printf("%u", b->height);
 				break;
+			case 'H':
+				dump_block_header(b->b);
+				break;
 			default:
 				goto bad_fmt;
 			}
@@ -334,6 +322,9 @@ static void print_format(const char *format,
 				printf("%"PRIi64,
 				       calculate_fees(utxo_map, t, txnum == 0));
 				break;
+			case 'X':
+				dump_tx(t);
+				break;
 			default:
 				goto bad_fmt;
 			}
@@ -357,6 +348,9 @@ static void print_format(const char *format,
 			case 'N':
 				printf("%zu", i - t->input);
 				break;
+			case 'X':
+				dump_tx_input(i);
+				break;
 			default:
 				goto bad_fmt;
 			}
@@ -376,6 +370,9 @@ static void print_format(const char *format,
 				break;
 			case 'N':
 				printf("%zu", o - t->output);
+				break;
+			case 'X':
+				dump_tx_output(o);
 				break;
 			default:
 				goto bad_fmt;
@@ -433,6 +430,7 @@ int main(int argc, char *argv[])
 			   "  %bc: block transaction count\n"
 			   "  %bh: block hash\n"
 			   "  %bN: block height\n"
+			   "  %bH: block header (hex string)\n"
 			   "Valid transaction, input or output format:\n"
 			   "  %th: transaction hash\n"
 			   "  %tv: transaction version\n"
@@ -442,17 +440,20 @@ int main(int argc, char *argv[])
 			   "  %tl: transaction length\n"
 			   "  %tN: transaction number\n"
 			   "  %tF: transaction fee paid\n"
+			   "  %tX: transaction in hex\n"
 			   "Valid input format:\n"
 			   "  %ih: input hash\n"
 			   "  %ii: input index\n"
 			   "  %il: input script length\n"
 			   "  %is: input script as a hex string\n"
 			   "  %iN: input number\n"
+			   "  %iX: input in hex\n"
 			   "Valid output format:\n"
 			   "  %oa: output amount\n"
 			   "  %ol: output script length\n"
 			   "  %os: output script as a hex string\n"
 			   "  %oN: output number",
+			   "  %oX: output in hex\n"
 			   "Display help message");
 	opt_register_arg("--block", opt_set_charp, NULL, &blockfmt,
 			   "Format to print for each block");
