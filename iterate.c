@@ -166,19 +166,25 @@ static bool is_zero(u8 hash[SHA256_DIGEST_LENGTH])
 	return true;
 }
 
-static void set_height(struct block_map *block_map, struct block *b)
+static bool set_height(struct block_map *block_map, struct block *b)
 {
 	struct block *i, *prev;
 
 	if (b->height != -1)
-		return;
+		return true;
 
 	i = b;
 	do {
 		prev = block_map_get(block_map, i->b->prev_hash);
-		if (!prev)
-			errx(1, "Block has unknown prev "SHA_FMT,
-			     SHA_VALS(i->b->prev_hash));
+		if (!prev) {
+			warnx("Block "SHA_FMT" has unknown prev "SHA_FMT,
+			      SHA_VALS(i->sha),
+			      SHA_VALS(i->b->prev_hash));
+			/* Remove it, and all children. */
+			for (; i; i = i->next)
+				block_map_del(block_map, i);
+			return false;
+		}
 		prev->next = i;
 		i = prev;
 	} while (i->height == -1);
@@ -189,6 +195,7 @@ static void set_height(struct block_map *block_map, struct block *b)
 		i->height = prev->height + 1;
 		prev = i;
 	}
+	return true;
 }
 
 /* This is kind of silly, since they can print it and sum it
