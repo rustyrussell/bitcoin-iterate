@@ -594,16 +594,13 @@ int main(int argc, char *argv[])
 		off_t off;
 		struct bitcoin_transaction *tx;
 
-		if (start) {
-			if (b != start)
-				continue;
+		if (b == start)
 			start = NULL;
-		}
 
-		if (blockfmt)
+		if (!start && blockfmt)
 			print_format(blockfmt, NULL, b, NULL, 0, NULL, NULL);
 
-		if (progress_marks
+		if (!start && progress_marks
 		    && b->height % (best->height / progress_marks)
 		    == (best->height / progress_marks) - 1)
 			fprintf(stderr, ".");
@@ -623,11 +620,11 @@ int main(int argc, char *argv[])
 			read_bitcoin_transaction(tx, &tx[i],
 						 block_file(b->filenum), &off);
 
-			if (txfmt)
+			if (!start && txfmt)
 				print_format(txfmt, &utxo_map, b, &tx[i], i,
 					     NULL, NULL);
 
-			if (inputfmt) {
+			if (!start && inputfmt) {
 				for (j = 0; j < tx[i].input_count; j++) {
 					print_format(inputfmt, &utxo_map, b,
 						     &tx[i], i, &tx[i].input[j],
@@ -635,7 +632,7 @@ int main(int argc, char *argv[])
 				}
 			}
 
-			if (outputfmt) {
+			if (!start && outputfmt) {
 				for (j = 0; j < tx[i].output_count; j++) {
 					print_format(outputfmt, &utxo_map, b,
 						     &tx[i], i, NULL,
