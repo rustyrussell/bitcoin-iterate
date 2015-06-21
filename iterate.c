@@ -414,6 +414,7 @@ int main(int argc, char *argv[])
 	size_t i, block_count = 0;
 	off_t last_discard;
 	bool quiet = false, needs_utxo;
+	unsigned long block_start = 0, block_end = -1UL;
 	struct block *b, *best, *genesis = NULL, *next, *start = NULL;
 	struct block_map block_map;
 	char *blockdir = NULL;
@@ -478,10 +479,14 @@ int main(int argc, char *argv[])
 			 "Don't output progress information");
 	opt_register_arg("--blockdir", opt_set_charp, NULL, &blockdir,
 			 "Block directory instead of ~/.bitcoin/blocks");
-	opt_register_arg("--end", opt_set_hash, NULL, tip,
+	opt_register_arg("--end-hash", opt_set_hash, NULL, tip,
 			 "Best blockhash to use instead of longest chain.");
-	opt_register_arg("--start", opt_set_hash, NULL, start_hash,
+	opt_register_arg("--start-hash", opt_set_hash, NULL, start_hash,
 			 "Blockhash to start at instead of genesis.");
+	opt_register_arg("--start", opt_set_ulongval, NULL, &block_start,
+			 "Block number to start instead of genesis.");
+	opt_register_arg("--end", opt_set_ulongval, NULL, &block_end,
+			 "Block number to end at instead of longest chain.");
 	opt_parse(&argc, argv, opt_log_stderr_exit);
 
 	if (argc != 1)
@@ -580,6 +585,25 @@ int main(int argc, char *argv[])
 	for (b = best; b; b = block_map_get(&block_map, b->b->prev_hash)) {
 		b->next = next;
 		next = b;
+	}
+
+	/* If they told us to end somewhere, do that. */
+	if (block_end != -1UL) {
+		for (b = genesis; b->height != block_end; b = b->next) {
+			if (!b->next)
+				errx(1, "No block end %lu found", block_end);
+		}
+		best = b;
+		b->next = NULL;
+	}
+
+	/* Similar with start block */
+	if (block_start != 0) {
+		for (b = genesis; b->height != block_start; b = b->next) {
+			if (!b->next)
+				errx(1, "No block start %lu found", block_start);
+		}
+		start = b;
 	}
 
 	utxo_map_init(&utxo_map);

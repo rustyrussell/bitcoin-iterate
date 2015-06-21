@@ -81,11 +81,17 @@ OPTIONS
   %oN: output number within transaction
   %oX: output as a hex string
 
-*--end*::
+*--end-hash*::
   Stop iteration at this block hash.
 
-*--start*::
+*--start-hash*::
   Start iteration at this block hash.
+
+*--end*::
+  Stop iteration at this block number (on longest chain).
+
+*--start*::
+  Start iteration at this block number (on longest chain).
 
 *-q, --quiet*::
   Don't print progress messages, just print the output.  All progress
