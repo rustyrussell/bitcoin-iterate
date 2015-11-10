@@ -512,10 +512,20 @@ int main(int argc, char *argv[])
 		last_discard = off = 0;
 		for (;;) {
 			off_t block_start;
+			struct block *old;
 			struct file *f = block_file(i);
 
-			if (!next_block_header_prefix(f, &off))
+			block_start = off;
+			if (!next_block_header_prefix(f, &off)) {
+				if (off != block_start)
+					warnx("Skipped %lu at end of %s",
+					      off - block_start, block_fnames[i]);
 				break;
+			}
+			if (off != block_start)
+				warnx("Skipped %lu@%lu in %s",
+				      off - block_start, block_start,
+				      block_fnames[i]);
 
 			block_start = off;
 			b = tal(tal_ctx, struct block);
@@ -529,6 +539,14 @@ int main(int argc, char *argv[])
 			}
 
 			b->pos = off;
+			old = block_map_get(&block_map, b->sha);
+			if (old) {
+				warnx("Already have "SHA_FMT" from %s %lu/%u",
+				      SHA_VALS(b->sha),
+				      block_fnames[old->filenum],
+				      old->pos, old->b->len);
+				block_map_delkey(&block_map, b->sha);
+			}
 			block_map_add(&block_map, b);
 			if (is_zero(b->b->prev_hash)) {
 				genesis = b;
