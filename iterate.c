@@ -70,17 +70,11 @@ struct utxo {
 	/* txid */
 	u8 tx[SHA256_DIGEST_LENGTH];
 
-	/* Which block are we in? */
-	const struct block *b;
-
-	/* Transaction number within the block. */
-	u32 txnum;
+	/* Number of outputs. */
+	u32 num_outputs;
 
 	/* Reference count for this tx. */
 	u32 unspent_outputs;
-
-	/* Offset within b->filenum */
-	off_t txoff;
 
 	/* Amount for each output. */
 	u64 amount[];
@@ -110,11 +104,8 @@ static void add_utxo(struct utxo_map *utxo_map,
 			  * t->output_count, false, TAL_LABEL(struct utxo, ""));
 
 	memcpy(utxo->tx, t->sha256, sizeof(utxo->tx));
-	utxo->b = b;
-	utxo->txnum = txnum;
-	utxo->unspent_outputs = t->output_count;
-	utxo->txoff = off;
-	for (i = 0; i < t->output_count; i++)
+	utxo->num_outputs = utxo->unspent_outputs = t->output_count;
+	for (i = 0; i < utxo->num_outputs; i++)
 		utxo->amount[i] = t->output[i].amount;
 
 	utxo_map_add(utxo_map, utxo);
@@ -212,25 +203,16 @@ static s64 calculate_fees(const struct utxo_map *utxo_map,
 	
 	for (i = 0; i < t->input_count; i++) {
 		struct utxo *utxo;
-		struct bitcoin_transaction *in;
-		off_t off;
 
 		utxo = utxo_map_get(utxo_map, t->input[i].hash);
 		if (!utxo)
 			errx(1, "Unknown utxo for "SHA_FMT,
 			     SHA_VALS(t->input[i].hash));
 
-		in = tal(utxo, struct bitcoin_transaction);
-		off = utxo->txoff;
-		read_bitcoin_transaction(in, in, block_file(utxo->b->filenum),
-					 &off);
-		if (t->input[i].index >= in->output_count)
-			errx(1, "Bad input index %u for input %zu of "
-			     SHA_FMT,
-			     t->input[i].index, i,
-			     SHA_VALS(t->input[i].hash));
-		total += in->output[t->input[i].index].amount;
-		tal_free(in);
+		if (t->input[i].index >= utxo->num_outputs)
+			errx(1, "Invalid utxo output %u for "SHA_FMT,
+			     t->input[i].index, SHA_VALS(t->input[i].hash));
+		total += utxo->amount[t->input[i].index];
 	}
 
 sum_outputs:
