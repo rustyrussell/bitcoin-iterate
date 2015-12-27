@@ -116,18 +116,30 @@ static void add_utxo(struct utxo_map *utxo_map,
 static bool use_mmap = true;
 static char **block_fnames;
 
-/* Cache file opens; we only open one at a time anyway. */
+/* Cache file opens. */
 static struct file *block_file(unsigned int index)
 {
-	static struct file f;
+#define NUM_BLOCKFILES 2
+	static struct file f[NUM_BLOCKFILES];
+	static size_t next;
+	size_t i;
 
-	if (f.name != block_fnames[index]) {
-		if (f.name)
-			file_close(&f);
-		file_open(&f, block_fnames[index], 0,
-			  O_RDONLY | (use_mmap ? 0 : O_NO_MMAP));
+	for (i = 0; i < NUM_BLOCKFILES; i++) {
+		if (f[i].name == block_fnames[index])
+			return f+i;
 	}
-	return &f;
+
+	/* Kick one out. */
+	i = next;
+	if (f[i].name)
+		file_close(&f[i]);
+
+	file_open(&f[i], block_fnames[index], 0,
+		  O_RDONLY | (use_mmap ? 0 : O_NO_MMAP));
+	next++;
+	if (next == NUM_BLOCKFILES)
+		next = 0;
+	return f + i;
 }
 
 
