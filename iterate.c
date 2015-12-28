@@ -670,7 +670,7 @@ int main(int argc, char *argv[])
 				}
 			}
 
-			}
+//			}
 		}
 		tal_free(tx);
 	}
