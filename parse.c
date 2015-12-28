@@ -135,10 +135,8 @@ void read_bitcoin_transaction(const tal_t *ctx,
 }
 
 /* Inefficient, but blk*.dat can have zero(?) padding. */
-bool next_block_header_prefix(struct file *f, off_t *off)
+bool next_block_header_prefix(struct file *f, off_t *off, const u32 marker)
 {
-	const u32 marker = 0xD9B4BEF9;
-
 	while (*off + sizeof(u32) <= f->len) {
 		u32 val;
 
@@ -156,7 +154,8 @@ bool next_block_header_prefix(struct file *f, off_t *off)
 struct bitcoin_block *
 read_bitcoin_block_header(tal_t *ctx,
 			  struct file *f, off_t *off,
-			  u8 block_md[SHA256_DIGEST_LENGTH])
+			  u8 block_md[SHA256_DIGEST_LENGTH],
+			  const u32 marker)
 {
 	struct bitcoin_block *block;
 	SHA256_CTX sha256;
@@ -164,7 +163,7 @@ read_bitcoin_block_header(tal_t *ctx,
 
 	block = tal(ctx, struct bitcoin_block);
 	block->D9B4BEF9 = pull_u32(f, off);
-	assert(block->D9B4BEF9 == 0xd9b4bef9);
+	assert(block->D9B4BEF9 == marker);
 	block->len = pull_u32(f, off);
 
 	/* Hash only covers version to nonce, inclusive. */
