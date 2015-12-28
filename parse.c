@@ -74,28 +74,42 @@ static void pull_hash(struct file *f, off_t *poff, u8 dst[32])
 }
 
 static void read_input(const tal_t *ctx, struct file *f, off_t *poff,
-		       struct bitcoin_transaction_input *input)
+		       struct bitcoin_transaction_input *input,
+		       bool read_scripts)
 {
 	pull_hash(f, poff, input->hash);
 	input->index = pull_u32(f, poff);
 	input->script_length = pull_varint(f, poff);
-	input->script = tal_arr(ctx, u8, input->script_length);
-	pull_bytes(f, poff, input->script, input->script_length);
+	if (read_scripts) {
+		input->script = tal_arr(ctx, u8, input->script_length);
+		pull_bytes(f, poff, input->script, input->script_length);
+	} else {
+		input->script = NULL;
+		*poff += input->script_length;
+	}
+
 	input->sequence_number = pull_u32(f, poff);
 }
 
 static void read_output(const tal_t *ctx, struct file *f, off_t *poff,
-			struct bitcoin_transaction_output *output)
+			struct bitcoin_transaction_output *output,
+			bool read_scripts)
 {
 	output->amount = pull_u64(f, poff);
 	output->script_length = pull_varint(f, poff);
-	output->script = tal_arr(ctx, u8, output->script_length);
-	pull_bytes(f, poff, output->script, output->script_length);
+	if (read_scripts) {
+		output->script = tal_arr(ctx, u8, output->script_length);
+		pull_bytes(f, poff, output->script, output->script_length);
+	} else {
+		output->script = NULL;
+		*poff += output->script_length;
+	}
 }
 
 void read_bitcoin_transaction(const tal_t *ctx,
 			      struct bitcoin_transaction *trans,
-			      struct file *f, off_t *poff)
+			      struct file *f, off_t *poff,
+			      bool read_scripts)
 {
 	size_t i;
 	off_t start = *poff;
@@ -107,13 +121,13 @@ void read_bitcoin_transaction(const tal_t *ctx,
 			       struct bitcoin_transaction_input,
 			       trans->input_count);
 	for (i = 0; i < trans->input_count; i++)
-		read_input(ctx, f, poff, trans->input + i);
+		read_input(ctx, f, poff, trans->input + i, read_scripts);
 	trans->output_count = pull_varint(f, poff);
 	trans->output = tal_arr(ctx,
 				struct bitcoin_transaction_output,
 				trans->output_count);
 	for (i = 0; i < trans->output_count; i++)
-		read_output(ctx, f, poff, trans->output + i);
+		read_output(ctx, f, poff, trans->output + i, read_scripts);
 	trans->lock_time = pull_u32(f, poff);
 
 	/* Bitcoin uses double sha (it's not quite known why...) */

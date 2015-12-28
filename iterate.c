@@ -398,7 +398,7 @@ int main(int argc, char *argv[])
 		*inputfmt = NULL, *outputfmt = NULL;
 	size_t i, block_count = 0;
 	off_t last_discard;
-	bool quiet = false, needs_utxo;
+	bool quiet = false, needs_utxo, read_scripts;
 	unsigned long block_start = 0, block_end = -1UL;
 	struct block *b, *best, *genesis = NULL, *next, *start = NULL;
 	struct block_map block_map;
@@ -611,6 +611,13 @@ int main(int argc, char *argv[])
 
 	utxo_map_init(&utxo_map);
 
+	/* Optimization: figure out if we need input/output scripts. */
+	read_scripts = false;
+	if (inputfmt && strstr(inputfmt, "%is"))
+		read_scripts = true;
+	if (outputfmt && strstr(outputfmt, "%os"))
+		read_scripts = true;
+	
 	/* Optimization: figure out of we have to maintain UTXO map */
 	needs_utxo = false;
 
@@ -653,7 +660,8 @@ int main(int argc, char *argv[])
 			s64 fee = 0;
 
 			read_bitcoin_transaction(tx, &tx[i],
-						 block_file(b->filenum), &off);
+						 block_file(b->filenum), &off,
+						 read_scripts);
 
 			if (needs_utxo) {
 				fee = calculate_fees(&utxo_map, &tx[i],
