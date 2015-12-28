@@ -111,6 +111,21 @@ static void add_utxo(struct utxo_map *utxo_map,
 	utxo_map_add(utxo_map, utxo);
 }
 
+static void release_utxo(struct utxo_map *utxo_map,
+			 const struct bitcoin_transaction_input *i)
+{
+	struct utxo *utxo;
+
+	utxo = utxo_map_get(utxo_map, i->hash);
+	if (!utxo)
+		errx(1, "Unknown utxo for "SHA_FMT, SHA_VALS(i->hash));
+
+	if (--utxo->unspent_outputs == 0) {
+		utxo_map_del(utxo_map, utxo);
+		tal_free(utxo);
+	}
+}
+
 #define CHUNK (128 * 1024 * 1024)
 
 static bool use_mmap = true;
@@ -188,7 +203,7 @@ static bool set_height(struct block_map *block_map, struct block *b)
 
 /* This is kind of silly, since they can print it and sum it
  * themselves.  But convenient though... */
-static s64 calculate_fees(struct utxo_map *utxo_map,
+static s64 calculate_fees(const struct utxo_map *utxo_map,
 			  const struct bitcoin_transaction *t,
 			  bool is_coinbase)
 {
@@ -210,11 +225,6 @@ static s64 calculate_fees(struct utxo_map *utxo_map,
 			errx(1, "Invalid utxo output %u for "SHA_FMT,
 			     t->input[i].index, SHA_VALS(t->input[i].hash));
 		total += utxo->amount[t->input[i].index];
-
-		if (--utxo->unspent_outputs == 0) {
-			utxo_map_del(utxo_map, utxo);
-			tal_free(utxo);
-		}
 	}
 
 sum_outputs:
@@ -224,7 +234,6 @@ sum_outputs:
 	if (!is_coinbase && total < 0)
 		errx(1, "Invalid total %"PRIi64" for "SHA_FMT,
 		     total, SHA_VALS(t->sha256));
-
 	return total;
 }
 
@@ -235,8 +244,7 @@ static void print_format(const char *format,
 			 struct bitcoin_transaction *t,
 			 size_t txnum,
 			 struct bitcoin_transaction_input *i,
-			 struct bitcoin_transaction_output *o,
-			 s64 fee)
+			 struct bitcoin_transaction_output *o)
 {
 	const char *c;
 
@@ -312,7 +320,8 @@ static void print_format(const char *format,
 				printf("%zu", txnum);
 				break;
 			case 'F':
-				printf("%"PRIi64, fee);
+				printf("%"PRIi64,
+				       calculate_fees(utxo_map, t, txnum == 0));
 				break;
 			case 'X':
 				dump_tx(t);
@@ -639,7 +648,7 @@ int main(int argc, char *argv[])
 			start = NULL;
 
 		if (!start && blockfmt)
-			print_format(blockfmt, NULL, b, NULL, 0, NULL, NULL, 0);
+			print_format(blockfmt, NULL, b, NULL, 0, NULL, NULL);
 
 		if (!start && progress_marks
 		    && b->height % (best->height / progress_marks)
@@ -657,28 +666,20 @@ int main(int argc, char *argv[])
 		for (i = 0; i < b->b->transaction_count; i++) {
 			size_t j;
 			off_t txoff = off;
-			s64 fee = 0;
 
 			read_bitcoin_transaction(tx, &tx[i],
 						 block_file(b->filenum), &off,
 						 read_scripts);
 
-			if (needs_utxo) {
-				fee = calculate_fees(&utxo_map, &tx[i],
-						     i == 0);
-				/* And add this tx's outputs to utxo */
-				add_utxo(&utxo_map, b, &tx[i], i, txoff);
-			}
-
 			if (!start && txfmt)
 				print_format(txfmt, &utxo_map, b, &tx[i], i,
-					     NULL, NULL, fee);
+					     NULL, NULL);
 
 			if (!start && inputfmt) {
 				for (j = 0; j < tx[i].input_count; j++) {
 					print_format(inputfmt, &utxo_map, b,
 						     &tx[i], i, &tx[i].input[j],
-						     NULL, fee);
+						     NULL);
 				}
 			}
 
@@ -686,8 +687,22 @@ int main(int argc, char *argv[])
 				for (j = 0; j < tx[i].output_count; j++) {
 					print_format(outputfmt, &utxo_map, b,
 						     &tx[i], i, NULL,
-						     &tx[i].output[j], fee);
+						     &tx[i].output[j]);
 				}
+			}
+
+			if (needs_utxo) {
+				/* Now we can release consumed utxos;
+				 * before there was a possibility of %tF */
+				/* Coinbase inputs are not real */
+				if (i != 0) {
+					for (j = 0; j < tx[i].input_count; j++)
+						release_utxo(&utxo_map,
+							     &tx[i].input[j]);
+				}
+
+				/* And add this tx's outputs to utxo */
+				add_utxo(&utxo_map, b, &tx[i], i, txoff);
 			}
 		}
 		tal_free(tx);
