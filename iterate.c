@@ -394,6 +394,9 @@ int main(int argc, char *argv[])
 	struct block_map_iter it;
 	struct utxo_map utxo_map;
 	unsigned progress_marks = 0;
+	bool use_testnet = false;
+	u32 netmarker;
+
 	u8 tip[SHA256_DIGEST_LENGTH] = { 0 },
 		start_hash[SHA256_DIGEST_LENGTH] = { 0 };
 
@@ -450,6 +453,8 @@ int main(int argc, char *argv[])
 			   "Don't mmap the block files");
 	opt_register_noarg("--quiet|-q", opt_set_bool, &quiet,
 			 "Don't output progress information");
+	opt_register_noarg("--testnet|-t", opt_set_bool, &use_testnet,
+			 "Look for testnet3 blocks");
 	opt_register_arg("--blockdir", opt_set_charp, NULL, &blockdir,
 			 "Block directory instead of ~/.bitcoin/blocks");
 	opt_register_arg("--end-hash", opt_set_hash, NULL, tip,
@@ -464,6 +469,12 @@ int main(int argc, char *argv[])
 
 	if (argc != 1)
 		opt_usage_and_exit(NULL);
+
+	if (use_testnet) {
+		netmarker = 0x0709110B;
+	} else {
+		netmarker = 0xD9B4BEF9;
+	}
 
 	block_map_init(&block_map);
 	block_fnames = block_filenames(tal_ctx, blockdir);
@@ -489,7 +500,7 @@ int main(int argc, char *argv[])
 			struct file *f = block_file(i);
 
 			block_start = off;
-			if (!next_block_header_prefix(f, &off)) {
+			if (!next_block_header_prefix(f, &off, netmarker)) {
 				if (off != block_start)
 					warnx("Skipped %lu at end of %s",
 					      off - block_start, block_fnames[i]);
@@ -505,7 +516,7 @@ int main(int argc, char *argv[])
 			b->filenum = i;
 			b->height = -1;
 			b->b = read_bitcoin_block_header(tal_ctx, f, &off,
-							 b->sha);
+							 b->sha, netmarker);
 			if (!b->b) {
 				tal_free(b);
 				break;
