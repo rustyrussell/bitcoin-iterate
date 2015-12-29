@@ -70,6 +70,9 @@ struct utxo {
 	/* txid */
 	u8 tx[SHA256_DIGEST_LENGTH];
 
+	/* Height. */
+	unsigned int height;
+
 	/* Number of outputs. */
 	u32 num_outputs;
 
@@ -105,6 +108,7 @@ static void add_utxo(struct utxo_map *utxo_map,
 
 	memcpy(utxo->tx, t->sha256, sizeof(utxo->tx));
 	utxo->num_outputs = utxo->unspent_outputs = t->output_count;
+	utxo->height = b->height;
 	for (i = 0; i < utxo->num_outputs; i++)
 		utxo->amount[i] = t->output[i].amount;
 
@@ -352,6 +356,14 @@ static void print_format(const char *format,
 			case 'X':
 				dump_tx_input(i);
 				break;
+			case 'B':
+				/* Coinbase doesn't have valid input. */
+				if (i - t->input != 0) {
+					struct utxo *utxo = utxo_map_get(utxo_map, i->hash);
+					printf("%u", utxo->height);
+				} else
+					printf("0");
+				break;
 			default:
 				goto bad_fmt;
 			}
@@ -450,6 +462,7 @@ int main(int argc, char *argv[])
 			   "  %is: input script as a hex string\n"
 			   "  %iN: input number\n"
 			   "  %iX: input in hex\n"
+			   "  %iB: input UTXO block number (0 for coinbase)\n"
 			   "Valid output format:\n"
 			   "  %oa: output amount\n"
 			   "  %ol: output script length\n"
@@ -631,10 +644,12 @@ int main(int argc, char *argv[])
 	needs_utxo = false;
 
 	/* We need it for fee calculation (can be asked by tx, input
-	 * or output) */
+	 * or output) or UTXO block number */
 	if (txfmt && strstr(txfmt, "%tF"))
 		needs_utxo = true;
 	if (inputfmt && strstr(inputfmt, "%tF"))
+		needs_utxo = true;
+	if (inputfmt && strstr(inputfmt, "%iB"))
 		needs_utxo = true;
 	if (outputfmt && strstr(outputfmt, "%tF"))
 		needs_utxo = true;
