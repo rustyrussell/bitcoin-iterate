@@ -20,6 +20,7 @@
 #include "blockfiles.h"
 #include "io.h"
 #include "dump.h"
+#include "space.h"
 
 #define SHA_FMT					   \
 	"%02x%02x%02x%02x%02x%02x%02x%02x"	   \
@@ -427,6 +428,7 @@ int main(int argc, char *argv[])
 	struct block_map_iter it;
 	struct utxo_map utxo_map;
 	unsigned progress_marks = 0;
+	struct space space;
 	u8 tip[SHA256_DIGEST_LENGTH] = { 0 },
 		start_hash[SHA256_DIGEST_LENGTH] = { 0 };
 
@@ -676,13 +678,14 @@ int main(int argc, char *argv[])
 
 		off = b->pos;
 
-		tx = tal_arr(b, struct bitcoin_transaction,
-			     b->b->transaction_count);
+		space_init(&space);
+		tx = space_alloc_arr(&space, struct bitcoin_transaction,
+				     b->b->transaction_count);
 		for (i = 0; i < b->b->transaction_count; i++) {
 			size_t j;
 			off_t txoff = off;
 
-			read_bitcoin_transaction(tx, &tx[i],
+			read_bitcoin_transaction(&space, &tx[i],
 						 block_file(b->filenum), &off,
 						 read_scripts);
 
@@ -720,7 +723,6 @@ int main(int argc, char *argv[])
 				add_utxo(&utxo_map, b, &tx[i], i, txoff);
 			}
 		}
-		tal_free(tx);
 	}
 	return 0;
 }

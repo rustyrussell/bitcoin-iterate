@@ -7,6 +7,7 @@
 #include <assert.h>
 #include "types.h"
 #include "parse.h"
+#include "space.h"
 
 static u64 pull_varint(struct file *f, off_t *poff)
 {
@@ -73,7 +74,7 @@ static void pull_hash(struct file *f, off_t *poff, u8 dst[32])
 	pull_bytes(f, poff, dst, 32);
 }
 
-static void read_input(const tal_t *ctx, struct file *f, off_t *poff,
+static void read_input(struct space *space, struct file *f, off_t *poff,
 		       struct bitcoin_transaction_input *input,
 		       bool read_scripts)
 {
@@ -81,7 +82,7 @@ static void read_input(const tal_t *ctx, struct file *f, off_t *poff,
 	input->index = pull_u32(f, poff);
 	input->script_length = pull_varint(f, poff);
 	if (read_scripts) {
-		input->script = tal_arr(ctx, u8, input->script_length);
+		input->script = space_alloc(space, input->script_length);
 		pull_bytes(f, poff, input->script, input->script_length);
 	} else {
 		input->script = NULL;
@@ -91,14 +92,14 @@ static void read_input(const tal_t *ctx, struct file *f, off_t *poff,
 	input->sequence_number = pull_u32(f, poff);
 }
 
-static void read_output(const tal_t *ctx, struct file *f, off_t *poff,
+static void read_output(struct space *space, struct file *f, off_t *poff,
 			struct bitcoin_transaction_output *output,
 			bool read_scripts)
 {
 	output->amount = pull_u64(f, poff);
 	output->script_length = pull_varint(f, poff);
 	if (read_scripts) {
-		output->script = tal_arr(ctx, u8, output->script_length);
+		output->script = space_alloc(space, output->script_length);
 		pull_bytes(f, poff, output->script, output->script_length);
 	} else {
 		output->script = NULL;
@@ -106,7 +107,7 @@ static void read_output(const tal_t *ctx, struct file *f, off_t *poff,
 	}
 }
 
-void read_bitcoin_transaction(const tal_t *ctx,
+void read_bitcoin_transaction(struct space *space,
 			      struct bitcoin_transaction *trans,
 			      struct file *f, off_t *poff,
 			      bool read_scripts)
@@ -117,17 +118,17 @@ void read_bitcoin_transaction(const tal_t *ctx,
 
 	trans->version = pull_u32(f, poff);
 	trans->input_count = pull_varint(f, poff);
-	trans->input = tal_arr(ctx,
-			       struct bitcoin_transaction_input,
-			       trans->input_count);
+	trans->input = space_alloc_arr(space,
+				       struct bitcoin_transaction_input,
+				       trans->input_count);
 	for (i = 0; i < trans->input_count; i++)
-		read_input(ctx, f, poff, trans->input + i, read_scripts);
+		read_input(space, f, poff, trans->input + i, read_scripts);
 	trans->output_count = pull_varint(f, poff);
-	trans->output = tal_arr(ctx,
-				struct bitcoin_transaction_output,
-				trans->output_count);
+	trans->output = space_alloc_arr(space,
+					struct bitcoin_transaction_output,
+					trans->output_count);
 	for (i = 0; i < trans->output_count; i++)
-		read_output(ctx, f, poff, trans->output + i, read_scripts);
+               read_output(space, f, poff, trans->output + i, read_scripts);
 	trans->lock_time = pull_u32(f, poff);
 
 	/* Bitcoin uses double sha (it's not quite known why...) */
@@ -135,7 +136,7 @@ void read_bitcoin_transaction(const tal_t *ctx,
 	if (likely(f->mmap)) {
 		SHA256_Update(&sha256, f->mmap + start, *poff - start);
 	} else {
-		u8 *buf = tal_arr(ctx, u8, *poff - start);
+		u8 *buf = tal_arr(NULL, u8, *poff - start);
 		file_read(f, start, *poff - start, buf);
 		SHA256_Update(&sha256, buf, *poff - start);
 		tal_free(buf);
