@@ -21,7 +21,7 @@ static void add_name(char ***names_p, unsigned int num, char *name)
 	(*names_p)[num] = name;
 }
 
-char **block_filenames(tal_t *ctx, const char *path)
+char **block_filenames(tal_t *ctx, const char *path, bool testnet3)
 {
 	char **names = tal_arr(ctx, char *, 0);
 	char *tmp_ctx = tal_arr(ctx, char, 0);
@@ -37,12 +37,16 @@ char **block_filenames(tal_t *ctx, const char *path)
 			base = passwd->pw_dir;
 		}
 
+		base = path_join(tmp_ctx, base, ".bitcoin");
+		if (testnet3)
+			base = path_join(tmp_ctx, base, "testnet3");
+
 		/* First try new-style: $HOME/.bitcoin/blocks/blk[0-9]*.dat. */
-		path = path_join(tmp_ctx, base, ".bitcoin/blocks");
+		path = path_join(tmp_ctx, base, "blocks");
 		dir = opendir(path);
 		if (!dir) {
 			/* Old-style: $HOME/.bitcoin/blk[0-9]*.dat. */
-			path = path_join(tmp_ctx, base, ".bitcoin");
+			path = base;
 			dir = opendir(path);
 		}
 	} else

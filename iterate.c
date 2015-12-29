@@ -491,7 +491,7 @@ int main(int argc, char *argv[])
 	opt_register_noarg("--testnet|-t", opt_set_bool, &use_testnet,
 			 "Look for testnet3 blocks");
 	opt_register_arg("--blockdir", opt_set_charp, NULL, &blockdir,
-			 "Block directory instead of ~/.bitcoin/blocks");
+			 "Block directory instead of ~/.bitcoin/[testnet3/]blocks");
 	opt_register_arg("--end-hash", opt_set_hash, NULL, tip,
 			 "Best blockhash to use instead of longest chain.");
 	opt_register_arg("--start-hash", opt_set_hash, NULL, start_hash,
@@ -512,7 +512,7 @@ int main(int argc, char *argv[])
 	}
 
 	block_map_init(&block_map);
-	block_fnames = block_filenames(tal_ctx, blockdir);
+	block_fnames = block_filenames(tal_ctx, blockdir, use_testnet);
 
 	for (i = 0; i < tal_count(block_fnames); i++) {
 		off_t off = 0;
