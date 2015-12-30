@@ -100,6 +100,9 @@ OPTIONS
   messages are printed to standard output prefixed with
   "bitcoin-iterate:" for easy filtering anyway.
 
+*-t, --testnet*::
+  Expect blocks from testnet3 rather than the main bitcoin chain.
+
 *--progress*='NUM-CHARS'::
   Print '.' to standard error such that at there will be this many drawn
   at completion.
