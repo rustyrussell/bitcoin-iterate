@@ -71,6 +71,9 @@ struct utxo {
 	/* txid */
 	u8 tx[SHA256_DIGEST_LENGTH];
 
+	/* Timestamp. */
+	u32 timestamp;
+
 	/* Height. */
 	unsigned int height;
 
@@ -110,6 +113,7 @@ static void add_utxo(struct utxo_map *utxo_map,
 	memcpy(utxo->tx, t->sha256, sizeof(utxo->tx));
 	utxo->num_outputs = utxo->unspent_outputs = t->output_count;
 	utxo->height = b->height;
+	utxo->timestamp = b->b->timestamp;
 	for (i = 0; i < utxo->num_outputs; i++)
 		utxo->amount[i] = t->output[i].amount;
 
@@ -172,6 +176,35 @@ static bool is_zero(u8 hash[SHA256_DIGEST_LENGTH])
 			return false;
 	}
 	return true;
+}
+
+#define MAXU32 (0xFFFFFFFFul)
+static void mul_and_add(u64 *over, u64 *base, u64 l, u64 r)
+{
+	u64 l_h = l >> 32,
+	    r_h = r >> 32,
+	    l_l = l & MAXU32,
+	    r_l = r & MAXU32;
+	u64 a = *over, b = 0, c = *base;
+	b = (c >> 32); c &= MAXU32;
+
+	assert (0 <= b && b <= MAXU32);
+	assert (0 <= c && c <= MAXU32);
+
+	c += l_l * r_l;
+	b += (c >> 32); c &= MAXU32;
+	a += (b >> 32); b &= MAXU32;
+
+	b += l_h * r_l;
+	a += (b >> 32); b &= MAXU32;
+
+	b += l_l * r_h;
+	a += (b >> 32); b &= MAXU32;
+
+	a += l_h * r_h;  /* realistically r_h=0 so this is a no op */
+
+	*over = a;
+	*base = (b << 32) | c;
 }
 
 static bool set_height(struct block_map *block_map, struct block *b)
@@ -240,6 +273,42 @@ sum_outputs:
 		errx(1, "Invalid total %"PRIi64" for "SHA_FMT,
 		     total, SHA_VALS(t->sha256));
 	return total;
+}
+
+static s64 calculate_bdd(const struct utxo_map *utxo_map,
+			  const struct bitcoin_transaction *t,
+			  bool is_coinbase, u32 timestamp)
+{
+	size_t i;
+	u64 total_over = 0;
+	u64 total_base = 0;
+
+	if (is_coinbase)
+		return 0;
+
+	for (i = 0; i < t->input_count; i++) {
+		struct utxo *utxo;
+
+		utxo = utxo_map_get(utxo_map, t->input[i].hash);
+		if (!utxo)
+			errx(1, "Unknown utxo for "SHA_FMT,
+			     SHA_VALS(t->input[i].hash));
+
+		if (t->input[i].index >= utxo->num_outputs)
+			errx(1, "Invalid utxo output %u for "SHA_FMT,
+			     t->input[i].index, SHA_VALS(t->input[i].hash));
+
+
+		mul_and_add(&total_over, &total_base,
+		            utxo->amount[t->input[i].index],
+		            timestamp > utxo->timestamp ? timestamp - utxo->timestamp : 0);
+	}
+
+	/* we have satoshi-seconds, convert to satoshi days by dividing by
+	 * 86400 */
+	if (total_over >= 86400/2)
+		return -2; /* overflow! */
+	return (((total_over << 47) / 86400) << 17) + (total_base / 86400);
 }
 
 /* FIXME: Speed up! */
@@ -327,6 +396,10 @@ static void print_format(const char *format,
 			case 'F':
 				printf("%"PRIi64,
 				       calculate_fees(utxo_map, t, txnum == 0));
+				break;
+			case 'D':
+				printf("%"PRIi64,
+				       calculate_bdd(utxo_map, t, txnum == 0, b->b->timestamp));
 				break;
 			case 'X':
 				dump_tx(t);
@@ -458,6 +531,7 @@ int main(int argc, char *argv[])
 			   "  %tl: transaction length\n"
 			   "  %tN: transaction number\n"
 			   "  %tF: transaction fee paid\n"
+			   "  %tD: transaction bitcoin days destroyed\n"
 			   "  %tX: transaction in hex\n"
 			   "Valid input format:\n"
 			   "  %ih: input hash\n"
@@ -659,11 +733,17 @@ int main(int argc, char *argv[])
 	 * or output) or UTXO block number */
 	if (txfmt && strstr(txfmt, "%tF"))
 		needs_utxo = true;
+	if (txfmt && strstr(txfmt, "%tD"))
+		needs_utxo = true;
 	if (inputfmt && strstr(inputfmt, "%tF"))
+		needs_utxo = true;
+	if (inputfmt && strstr(inputfmt, "%tD"))
 		needs_utxo = true;
 	if (inputfmt && strstr(inputfmt, "%iB"))
 		needs_utxo = true;
 	if (outputfmt && strstr(outputfmt, "%tF"))
+		needs_utxo = true;
+	if (outputfmt && strstr(outputfmt, "%tD"))
 		needs_utxo = true;
 
 	/* Now run forwards. */
