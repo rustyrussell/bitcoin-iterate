@@ -56,6 +56,7 @@ OPTIONS
   %tl: transaction length
   %tF: transaction fee paid by block (negative for coinbase reward)
   %tN: transaction number within block
+  %tD: transaction bitcoin days destroyed (by block times)
   %tX: transaction as a hex string (including inputs and outputs)
 
 *--input*='FORMAT'::
