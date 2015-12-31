@@ -67,6 +67,10 @@ static bool block_eq(const struct block *b, const u8 *key)
 HTABLE_DEFINE_TYPE(struct block, keyof_block_map, hash_sha, block_eq,
 		   block_map);
 
+#define UNKNOWN_OUTPUT 0
+#define PAYMENT_OUTPUT 1
+#define CHANGE_OUTPUT 2
+
 struct utxo {
 	/* txid */
 	u8 tx[SHA256_DIGEST_LENGTH];
@@ -82,6 +86,8 @@ struct utxo {
 
 	/* Amount for each output. */
 	u64 amount[];
+
+	/* Followed by a char per output for UNKNOWN/PAYMENT/CHANGE */
 };
 
 static const u8 *keyof_utxo(const struct utxo *utxo)
@@ -96,6 +102,39 @@ static bool utxohash_eq(const struct utxo *utxo, const u8 *key)
 
 HTABLE_DEFINE_TYPE(struct utxo, keyof_utxo, hash_sha, utxohash_eq, utxo_map);
 
+/* Only classify two-output txs for the moment, assuming round numbers
+ * are payments.  Furthur ideas from Harold:
+ *
+ * 1) if the input is P2SH, and there's a P2SH and P2PKH output, then
+ *    it's obvious.
+ *
+ * 2) lots of wallets still send change to the same public key hash as
+ *    they were received originally.
+ */
+static void guess_output_types(const struct bitcoin_transaction *t, u8 *types)
+{
+	if (t->output_count == 2) {
+		bool first_round = ((t->output[0].amount % 1000) == 0);
+		bool second_round = ((t->output[1].amount % 1000) == 0);
+		if (first_round != second_round) {
+			if (first_round) {
+				types[0] = PAYMENT_OUTPUT;
+				types[1] = CHANGE_OUTPUT;
+			} else {
+				types[1] = PAYMENT_OUTPUT;
+				types[0] = CHANGE_OUTPUT;
+			}
+			return;
+		}
+	}
+	memset(types, UNKNOWN_OUTPUT, t->output_count);
+}
+
+static u8 *output_types(struct utxo *utxo)
+{
+	return (u8 *)&utxo->amount[utxo->num_outputs];
+}
+
 static void add_utxo(struct utxo_map *utxo_map,
 		     const struct block *b,
 		     const struct bitcoin_transaction *t,
@@ -104,7 +143,7 @@ static void add_utxo(struct utxo_map *utxo_map,
 	struct utxo *utxo;
 	unsigned int i;
 
-	utxo = tal_alloc_(b, sizeof(*utxo) + sizeof(utxo->amount[0])
+	utxo = tal_alloc_(b, sizeof(*utxo) + (sizeof(utxo->amount[0]) + 1)
 			  * t->output_count, false, TAL_LABEL(struct utxo, ""));
 
 	memcpy(utxo->tx, t->sha256, sizeof(utxo->tx));
@@ -112,6 +151,7 @@ static void add_utxo(struct utxo_map *utxo_map,
 	utxo->height = b->height;
 	for (i = 0; i < utxo->num_outputs; i++)
 		utxo->amount[i] = t->output[i].amount;
+	guess_output_types(t, output_types(utxo));
 
 	utxo_map_add(utxo_map, utxo);
 }
@@ -365,6 +405,14 @@ static void print_format(const char *format,
 				} else
 					printf("0");
 				break;
+			case 'p':
+				/* Coinbase doesn't have valid input. */
+				if (txnum != 0) {
+					struct utxo *utxo = utxo_map_get(utxo_map, i->hash);
+					printf("%u", output_types(utxo)[i->index]);
+				} else
+					printf("%u", UNKNOWN_OUTPUT);
+				break;
 			default:
 				goto bad_fmt;
 			}
@@ -467,6 +515,10 @@ int main(int argc, char *argv[])
 			   "  %iN: input number\n"
 			   "  %iX: input in hex\n"
 			   "  %iB: input UTXO block number (0 for coinbase)\n"
+			   "  %ip: input payment guess: same ("
+			    stringify(CHANGE_OUTPUT) ") or different ("
+			    stringify(PAYMENT_OUTPUT) ") owner, or ("
+			    stringify(UNKNOWN_OUTPUT) ") unknown\n"
 			   "Valid output format:\n"
 			   "  %oa: output amount\n"
 			   "  %ol: output script length\n"
@@ -662,6 +714,8 @@ int main(int argc, char *argv[])
 	if (inputfmt && strstr(inputfmt, "%tF"))
 		needs_utxo = true;
 	if (inputfmt && strstr(inputfmt, "%iB"))
+		needs_utxo = true;
+	if (inputfmt && strstr(inputfmt, "%ip"))
 		needs_utxo = true;
 	if (outputfmt && strstr(outputfmt, "%tF"))
 		needs_utxo = true;
