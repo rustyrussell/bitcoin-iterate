@@ -397,6 +397,14 @@ static void print_format(const char *format,
 			case 'X':
 				dump_tx_input(i);
 				break;
+			case 'a':
+				/* Coinbase doesn't have valid input. */
+				if (txnum != 0) {
+					struct utxo *utxo = utxo_map_get(utxo_map, i->hash);
+					printf("%"PRIu64, utxo->amount[i->index]);
+				} else
+					printf("0");
+				break;
 			case 'B':
 				/* Coinbase doesn't have valid input. */
 				if (txnum != 0) {
@@ -508,6 +516,7 @@ int main(int argc, char *argv[])
 			   "  %tF: transaction fee paid\n"
 			   "  %tX: transaction in hex\n"
 			   "Valid input format:\n"
+			   "  %ia: input amount\n"
 			   "  %ih: input hash\n"
 			   "  %ii: input index\n"
 			   "  %il: input script length\n"
@@ -714,6 +723,8 @@ int main(int argc, char *argv[])
 	if (inputfmt && strstr(inputfmt, "%tF"))
 		needs_utxo = true;
 	if (inputfmt && strstr(inputfmt, "%iB"))
+		needs_utxo = true;
+	if (inputfmt && strstr(inputfmt, "%ia"))
 		needs_utxo = true;
 	if (inputfmt && strstr(inputfmt, "%ip"))
 		needs_utxo = true;

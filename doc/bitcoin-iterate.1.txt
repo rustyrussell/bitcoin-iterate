@@ -150,8 +150,8 @@ bitcoin-iterate --output=%bn,%th,%os
 
 NOTES
 -----
-Use of *%tF* or *%iB* significantly slows iteration, as this requires
-*bitcoin-iterate* to track unspent outputs.
+Use of *%tF*, *%iB*, *%ia* or *%ip* significantly slows iteration, as
+this requires *bitcoin-iterate* to track unspent outputs.
 
 BUGS
 ----
