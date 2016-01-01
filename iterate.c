@@ -491,6 +491,11 @@ static bool read_utxo_cache(const tal_t *ctx,
 	}
 
 	bytes = tal_count(contents) - 1;
+
+	/* Size UTXO appropriately immediately (slightly oversize). */
+	utxo_map_clear(utxo_map);
+	utxo_map_init_sized(utxo_map, bytes / sizeof(struct utxo));
+
 	while (bytes) {
 		struct utxo *utxo;
 		size_t size = sizeof(*utxo) + sizeof(utxo->amount[0])
