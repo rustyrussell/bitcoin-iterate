@@ -166,17 +166,15 @@ bool next_block_header_prefix(struct file *f, off_t *off, const u32 marker)
 	return false;
 }
 
-struct bitcoin_block *
-read_bitcoin_block_header(tal_t *ctx,
+bool
+read_bitcoin_block_header(struct bitcoin_block *block,
 			  struct file *f, off_t *off,
 			  u8 block_md[SHA256_DIGEST_LENGTH],
 			  const u32 marker)
 {
-	struct bitcoin_block *block;
 	SHA256_CTX sha256;
 	off_t start;
 
-	block = tal(ctx, struct bitcoin_block);
 	block->D9B4BEF9 = pull_u32(f, off);
 	assert(block->D9B4BEF9 == marker);
 	block->len = pull_u32(f, off);
@@ -195,7 +193,7 @@ read_bitcoin_block_header(tal_t *ctx,
 	if (likely(f->mmap)) {
 		SHA256_Update(&sha256, f->mmap + start, *off - start);
 	} else {
-		u8 *buf = tal_arr(ctx, u8, *off - start);
+		u8 *buf = tal_arr(NULL, u8, *off - start);
 		file_read(f, start, *off - start, buf);
 		SHA256_Update(&sha256, buf, *off - start);
 		tal_free(buf);
