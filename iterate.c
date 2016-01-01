@@ -359,7 +359,7 @@ static void print_format(const char *format,
 				break;
 			case 'B':
 				/* Coinbase doesn't have valid input. */
-				if (i - t->input != 0) {
+				if (txnum != 0) {
 					struct utxo *utxo = utxo_map_get(utxo_map, i->hash);
 					printf("%u", utxo->height);
 				} else
