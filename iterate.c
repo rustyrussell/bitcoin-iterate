@@ -44,9 +44,10 @@ struct block {
 	unsigned int filenum;
 	/* Position of first transaction */
 	off_t pos;
-	struct bitcoin_block *b;
 	/* So we can iterate forwards. */
 	struct block *next;
+	/* Bitcoin block header. */
+	struct bitcoin_block bh;
 };
 
 /* Hash blocks by sha */
@@ -259,11 +260,11 @@ static bool set_height(struct block_map *block_map, struct block *b)
 
 	i = b;
 	do {
-		prev = block_map_get(block_map, i->b->prev_hash);
+		prev = block_map_get(block_map, i->bh.prev_hash);
 		if (!prev) {
 			warnx("Block "SHA_FMT" has unknown prev "SHA_FMT,
 			      SHA_VALS(i->sha),
-			      SHA_VALS(i->b->prev_hash));
+			      SHA_VALS(i->bh.prev_hash));
 			/* Remove it, and all children. */
 			for (; i; i = i->next)
 				block_map_del(block_map, i);
@@ -375,28 +376,28 @@ static void print_format(const char *format,
 		case 'b':
 			switch (c[2]) {
 			case 'l':
-				printf("%u", b->b->len);
+				printf("%u", b->bh.len);
 				break;
 			case 'v':
-				printf("%u", b->b->version);
+				printf("%u", b->bh.version);
 				break;
 			case 'p':
-				print_hash(b->b->prev_hash);
+				print_hash(b->bh.prev_hash);
 				break;
 			case 'm':
-				print_hash(b->b->merkle_hash);
+				print_hash(b->bh.merkle_hash);
 				break;
 			case 's':
-				printf("%u", b->b->timestamp);
+				printf("%u", b->bh.timestamp);
 				break;
 			case 't':
-				printf("%u", b->b->target);
+				printf("%u", b->bh.target);
 				break;
 			case 'n':
-				printf("%u", b->b->nonce);
+				printf("%u", b->bh.nonce);
 				break;
 			case 'c':
-				printf("%"PRIu64, b->b->transaction_count);
+				printf("%"PRIu64, b->bh.transaction_count);
 				break;
 			case 'h':
 				print_hash(b->sha);
@@ -405,7 +406,7 @@ static void print_format(const char *format,
 				printf("%u", b->height);
 				break;
 			case 'H':
-				dump_block_header(b->b);
+				dump_block_header(&b->bh);
 				break;
 			default:
 				goto bad_fmt;
@@ -776,9 +777,8 @@ int main(int argc, char *argv[])
 			b = tal(tal_ctx, struct block);
 			b->filenum = i;
 			b->height = -1;
-			b->b = read_bitcoin_block_header(tal_ctx, f, &off,
-							 b->sha, netmarker);
-			if (!b->b) {
+			if (!read_bitcoin_block_header(&b->bh, f, &off,
+						       b->sha, netmarker)) {
 				tal_free(b);
 				break;
 			}
@@ -789,16 +789,16 @@ int main(int argc, char *argv[])
 				warnx("Already have "SHA_FMT" from %s %lu/%u",
 				      SHA_VALS(b->sha),
 				      block_fnames[old->filenum],
-				      old->pos, old->b->len);
+				      old->pos, old->bh.len);
 				block_map_delkey(&block_map, b->sha);
 			}
 			block_map_add(&block_map, b);
-			if (is_zero(b->b->prev_hash)) {
+			if (is_zero(b->bh.prev_hash)) {
 				genesis = b;
 				b->height = 0;
 			}
 
-			skip_bitcoin_transactions(b->b, block_start, &off);
+			skip_bitcoin_transactions(&b->bh, block_start, &off);
 			if (off > last_discard + CHUNK && f->mmap) {
 				size_t len = CHUNK;
 				if ((size_t)last_discard + len > f->len)
@@ -845,7 +845,7 @@ int main(int argc, char *argv[])
 
 	/* Now iterate down from best, setting next pointers. */
 	next = NULL;
-	for (b = best; b; b = block_map_get(&block_map, b->b->prev_hash)) {
+	for (b = best; b; b = block_map_get(&block_map, b->bh.prev_hash)) {
 		b->next = next;
 		next = b;
 	}
@@ -955,8 +955,8 @@ int main(int argc, char *argv[])
 
 		space_init(&space);
 		tx = space_alloc_arr(&space, struct bitcoin_transaction,
-				     b->b->transaction_count);
-		for (i = 0; i < b->b->transaction_count; i++) {
+				     b->bh.transaction_count);
+		for (i = 0; i < b->bh.transaction_count; i++) {
 			size_t j;
 			off_t txoff = off;
 
