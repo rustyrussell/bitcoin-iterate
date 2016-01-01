@@ -142,7 +142,8 @@ static u8 *output_types(struct utxo *utxo)
 	return (u8 *)&utxo->amount[utxo->num_outputs];
 }
 
-static void add_utxo(struct utxo_map *utxo_map,
+static void add_utxo(const tal_t *tal_ctx,
+		     struct utxo_map *utxo_map,
 		     const struct block *b,
 		     const struct bitcoin_transaction *t,
 		     u32 txnum, off_t off)
@@ -150,7 +151,7 @@ static void add_utxo(struct utxo_map *utxo_map,
 	struct utxo *utxo;
 	unsigned int i;
 
-	utxo = tal_alloc_(b, sizeof(*utxo) + (sizeof(utxo->amount[0]) + 1)
+	utxo = tal_alloc_(tal_ctx, sizeof(*utxo) + (sizeof(utxo->amount[0]) + 1)
 			  * t->output_count, false, TAL_LABEL(struct utxo, ""));
 
 	memcpy(utxo->tx, t->sha256, sizeof(utxo->tx));
@@ -608,18 +609,10 @@ static void write_utxo_cache(const struct utxo_map *utxo_map,
 
 	fd = open(file, O_WRONLY|O_CREAT|O_EXCL, 0600);
 	if (fd < 0) {
-		if (errno == ENOENT) {
-			if (mkdir(cachedir, 0700) != 0)
-				err(1, "Creating cachedir '%s'", cachedir);
-			fd = open(file, O_WRONLY|O_CREAT|O_EXCL, 0600);
-			if (fd < 0)
-				err(1, "Creating '%s' for writing", file);
-		} else {
-			if (errno != EEXIST) 
-				err(1, "Creating '%s' for writing", file);
-			tal_free(file);
-			return;
-		}
+		if (errno != EEXIST) 
+			err(1, "Creating '%s' for writing", file);
+		tal_free(file);
+		return;
 	}
 
 	for (utxo = utxo_map_first(utxo_map, &it);
@@ -630,6 +623,71 @@ static void write_utxo_cache(const struct utxo_map *utxo_map,
 		if (write(fd, utxo, size) != size)
 			errx(1, "Short write to %s", file);
 	}
+}
+
+static void add_block(struct block_map *block_map, struct block *b,
+		      struct block **genesis)
+{
+	struct block *old = block_map_get(block_map, b->sha);
+	if (old) {
+		warnx("Already have "SHA_FMT" from %s %lu/%u",
+		      SHA_VALS(b->sha),
+		      block_fnames[old->filenum],
+		      old->pos, old->bh.len);
+		block_map_delkey(block_map, b->sha);
+	}
+	block_map_add(block_map, b);
+	if (is_zero(b->bh.prev_hash)) {
+		*genesis = b;
+		b->height = 0;
+	}
+}
+
+static void read_blockcache(const tal_t *tal_ctx,
+			    bool quiet,
+			    struct block_map *block_map,
+			    const char *blockcache,
+			    struct block **genesis)
+{
+	size_t i, num;
+	struct block *b = grab_file(tal_ctx, blockcache);
+
+	if (!b)
+		err(1, "Could not read %s", blockcache);
+
+	num = (tal_count(b) - 1) / sizeof(*b);
+	if (!quiet)
+		printf("Adding %zu blocks from cache\n", num);
+
+	block_map_init_sized(block_map, num);
+	for (i = 0; i < num; i++)
+		add_block(block_map, &b[i], genesis);
+}
+
+static void write_blockcache(struct block_map *block_map,
+			     const char *cachedir,
+			     const char *blockcache)
+{
+	struct block_map_iter it;
+	struct block *b;
+	int fd;
+
+	fd = open(blockcache, O_WRONLY|O_CREAT|O_TRUNC, 0600);
+	if (fd < 0 && errno == ENOENT) {
+		if (mkdir(cachedir, 0700) != 0)
+			err(1, "Creating cachedir '%s'", cachedir);
+		fd = open(blockcache, O_WRONLY|O_CREAT|O_EXCL, 0600);
+	}
+	if (fd < 0)
+		err(1, "Creating '%s' for writing", blockcache);
+
+	for (b = block_map_first(block_map, &it);
+	     b;
+	     b = block_map_next(block_map, &it)) {
+		if (write(fd, b, sizeof(*b)) != sizeof(*b))
+			err(1, "Short write to %s", blockcache);
+	}
+	close(fd);
 }
 
 int main(int argc, char *argv[])
@@ -643,7 +701,7 @@ int main(int argc, char *argv[])
 	unsigned long block_start = 0, block_end = -1UL;
 	struct block *b, *best, *genesis = NULL, *next, *start = NULL;
 	struct block_map block_map;
-	char *blockdir = NULL;
+	char *blockdir = NULL, *blockcache = NULL;
 	struct block_map_iter it;
 	struct utxo_map utxo_map;
 	unsigned progress_marks = 0;
@@ -738,9 +796,34 @@ int main(int argc, char *argv[])
 		netmarker = 0xD9B4BEF9;
 	}
 
-	block_map_init(&block_map);
 	block_fnames = block_filenames(tal_ctx, blockdir, use_testnet);
 
+	if (cachedir && tal_count(block_fnames)) {
+		size_t last = tal_count(block_fnames) - 1;
+		struct stat cache_st, block_st;
+
+		/* Cache matches name of final block file */
+		blockcache = path_join(tal_ctx, cachedir,
+				       path_basename(tal_ctx,
+						     block_fnames[last]));
+
+		if (stat(block_fnames[last], &block_st) != 0)
+			errx(1, "Could not stat %s", block_fnames[last]);
+		if (stat(blockcache, &cache_st) == 0) {
+			if (block_st.st_mtime >= cache_st.st_mtime) {
+				if (!quiet)
+					printf("%s is newer than cache\n",
+					       block_fnames[last]);
+			} else {
+				read_blockcache(tal_ctx, quiet,
+						&block_map, blockcache,
+						&genesis);
+				goto check_genesis;
+			}
+		}
+	}
+	block_map_init(&block_map);
+	
 	for (i = 0; i < tal_count(block_fnames); i++) {
 		off_t off = 0;
 
@@ -758,7 +841,6 @@ int main(int argc, char *argv[])
 		last_discard = off = 0;
 		for (;;) {
 			off_t block_start;
-			struct block *old;
 			struct file *f = block_file(i);
 
 			block_start = off;
@@ -784,19 +866,7 @@ int main(int argc, char *argv[])
 			}
 
 			b->pos = off;
-			old = block_map_get(&block_map, b->sha);
-			if (old) {
-				warnx("Already have "SHA_FMT" from %s %lu/%u",
-				      SHA_VALS(b->sha),
-				      block_fnames[old->filenum],
-				      old->pos, old->bh.len);
-				block_map_delkey(&block_map, b->sha);
-			}
-			block_map_add(&block_map, b);
-			if (is_zero(b->bh.prev_hash)) {
-				genesis = b;
-				b->height = 0;
-			}
+			add_block(&block_map, b, &genesis);
 
 			skip_bitcoin_transactions(&b->bh, block_start, &off);
 			if (off > last_discard + CHUNK && f->mmap) {
@@ -811,6 +881,13 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	if (blockcache) {
+		write_blockcache(&block_map, cachedir, blockcache);
+		if (!quiet)
+			printf("Wrote block cache to %s\n", blockcache);
+	}
+
+check_genesis:
 	if (!genesis)
 		errx(1, "Could not find a genesis block.");
 
@@ -906,7 +983,7 @@ int main(int argc, char *argv[])
 
 	/* Do we have cache utxo? */
 	if (cachedir && start && needs_utxo) {
-		if (read_utxo_cache(start, &utxo_map, cachedir, start->sha)) {
+		if (read_utxo_cache(tal_ctx, &utxo_map, cachedir, start->sha)) {
 			needs_fee = false;
 			if (!quiet)
 				printf("Found valid UTXO cache\n");
@@ -995,7 +1072,7 @@ int main(int argc, char *argv[])
 				}
 
 				/* And add this tx's outputs to utxo */
-				add_utxo(&utxo_map, b, &tx[i], i, txoff);
+				add_utxo(tal_ctx, &utxo_map, b, &tx[i], i, txoff);
 			}
 		}
 	}
