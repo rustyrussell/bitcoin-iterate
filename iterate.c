@@ -1,6 +1,7 @@
 /* GPLv2 or later, see LICENSE */
 #include <ccan/err/err.h>
 #include <ccan/tal/tal.h>
+#include <ccan/tal/path/path.h>
 #include <ccan/take/take.h>
 #include <ccan/short_types/short_types.h>
 #include <ccan/opt/opt.h>
@@ -8,6 +9,7 @@
 #include <ccan/rbuf/rbuf.h>
 #include <ccan/tal/str/str.h>
 #include <ccan/str/hex/hex.h>
+#include <ccan/tal/grab_file/grab_file.h>
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -16,6 +18,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <inttypes.h>
+#include <errno.h>
 #include "parse.h"
 #include "blockfiles.h"
 #include "io.h"
@@ -542,14 +545,95 @@ static char *opt_set_hash(const char *arg, u8 *h)
 	return NULL;
 }
 
+static bool read_utxo_cache(const tal_t *ctx,
+			    struct utxo_map *utxo_map,
+			    const char *cachedir,
+			    const u8 *blockid)
+{
+	char blockhex[hex_str_size(SHA256_DIGEST_LENGTH)];
+	char *file;
+	char *contents;
+	size_t bytes;
+
+	hex_encode(blockid, SHA256_DIGEST_LENGTH, blockhex, sizeof(blockhex));
+	file = path_join(NULL, cachedir, blockhex);
+	contents = grab_file(file, file);
+	if (!contents) {
+		tal_free(file);
+		return false;
+	}
+
+	bytes = tal_count(contents) - 1;
+	while (bytes) {
+		struct utxo *utxo;
+		size_t size = sizeof(*utxo) + sizeof(utxo->amount[0])
+			* ((struct utxo *)contents)->num_outputs;
+
+		/* Truncated? */
+		if (size > bytes) {
+			warnx("Truncated cache file %s: deleting", file);
+			unlink(file);
+			tal_free(file);
+			return false;
+		}
+		utxo = tal_alloc_(ctx, size, false, TAL_LABEL(struct utxo, ""));
+		memcpy(utxo, contents, size);
+		utxo_map_add(utxo_map, utxo);
+
+		contents += size;
+		bytes -= size;
+	}
+	tal_free(file);
+	return true;
+}
+
+static void write_utxo_cache(const struct utxo_map *utxo_map,
+			     const char *cachedir,
+			     const u8 *blockid)
+{
+	char *file;
+	char blockhex[hex_str_size(SHA256_DIGEST_LENGTH)];
+	struct utxo_map_iter it;
+	struct utxo *utxo;
+	int fd;
+
+	hex_encode(blockid, SHA256_DIGEST_LENGTH, blockhex, sizeof(blockhex));
+	file = path_join(NULL, cachedir, blockhex);
+
+	fd = open(file, O_WRONLY|O_CREAT|O_EXCL, 0600);
+	if (fd < 0) {
+		if (errno == ENOENT) {
+			if (mkdir(cachedir, 0700) != 0)
+				err(1, "Creating cachedir '%s'", cachedir);
+			fd = open(file, O_WRONLY|O_CREAT|O_EXCL, 0600);
+			if (fd < 0)
+				err(1, "Creating '%s' for writing", file);
+		} else {
+			if (errno != EEXIST) 
+				err(1, "Creating '%s' for writing", file);
+			tal_free(file);
+			return;
+		}
+	}
+
+	for (utxo = utxo_map_first(utxo_map, &it);
+	     utxo;
+	     utxo = utxo_map_next(utxo_map, &it)) {
+		size_t size = sizeof(*utxo) + sizeof(utxo->amount[0])
+			* utxo->num_outputs;
+		if (write(fd, utxo, size) != size)
+			errx(1, "Short write to %s", file);
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	void *tal_ctx = tal(NULL, char);
 	char *blockfmt = NULL, *txfmt = NULL,
-		*inputfmt = NULL, *outputfmt = NULL;
+		*inputfmt = NULL, *outputfmt = NULL, *cachedir = NULL;
 	size_t i, block_count = 0;
 	off_t last_discard;
-	bool quiet = false, needs_utxo, read_scripts;
+	bool quiet = false, needs_utxo, read_scripts, needs_fee;
 	unsigned long block_start = 0, block_end = -1UL;
 	struct block *b, *best, *genesis = NULL, *next, *start = NULL;
 	struct block_map block_map;
@@ -635,6 +719,8 @@ int main(int argc, char *argv[])
 			 "Block number to start instead of genesis.");
 	opt_register_arg("--end", opt_set_ulongval, NULL, &block_end,
 			 "Block number to end at instead of longest chain.");
+	opt_register_arg("--cache", opt_set_charp, NULL, &cachedir,
+			 "Cache for multiple runs.");
 	opt_parse(&argc, argv, opt_log_stderr_exit);
 
 	if (argc != 1)
@@ -811,13 +897,38 @@ int main(int argc, char *argv[])
 	if (outputfmt && strstr(outputfmt, "%tD"))
 		needs_utxo = true;
 
+	needs_fee = needs_utxo;
+
+	/* Do we have cache utxo? */
+	if (cachedir && start && needs_utxo) {
+		if (read_utxo_cache(start, &utxo_map, cachedir, start->sha)) {
+			needs_fee = false;
+			if (!quiet)
+				printf("Found valid UTXO cache\n");
+		} else if (!quiet)
+			printf("Did not find valid UTXO cache\n");
+	}
+
 	/* Now run forwards. */
 	for (b = genesis; b; b = b->next) {
 		off_t off;
 		struct bitcoin_transaction *tx;
 
-		if (b == start)
+		if (b == start) {
+			/* Are we UTXO caching? */
+			if (cachedir && needs_utxo) {
+				if (needs_fee) {
+					/* Save cache for next time. */
+					write_utxo_cache(&utxo_map, cachedir,
+							 b->sha);
+					if (!quiet)
+						printf("Wrote UTXO cache\n");
+				} else
+					/* We loaded cache, now we calc fee. */
+					needs_fee = true;
+			}
 			start = NULL;
+		}
 
 		if (!start && blockfmt)
 			print_format(blockfmt, NULL, b, NULL, 0, NULL, NULL);
@@ -828,9 +939,13 @@ int main(int argc, char *argv[])
 			fprintf(stderr, ".");
 
 		/* Don't read transactions if we don't have to */
-		if (!txfmt && !inputfmt && !outputfmt && !needs_utxo)
+		if (!txfmt && !inputfmt && !outputfmt)
 			continue;
 
+		/* If we haven't started and don't need to gather UTXO, skip */
+		if (start && !needs_fee)
+			continue;
+		
 		off = b->pos;
 
 		space_init(&space);
@@ -864,7 +979,7 @@ int main(int argc, char *argv[])
 				}
 			}
 
-			if (needs_utxo) {
+			if (needs_fee) {
 				/* Now we can release consumed utxos;
 				 * before there was a possibility of %tF */
 				/* Coinbase inputs are not real */

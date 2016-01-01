@@ -111,6 +111,10 @@ OPTIONS
 *--blockdir*='DIRECTORY'::
   Use this directory to find block files rather than ~/.bitcoin/blocks.
 
+*--cache*='DIRECTORY'::
+  Cache results in this directory; particularly useful
+  for repeated UTXO runs with same '--start'.
+
 *--no-mmap*::
   Use read, not mmap, on the block files.  This may be slower.
 
