@@ -145,12 +145,21 @@ static void add_utxo(struct utxo_map *utxo_map,
 {
 	struct utxo *utxo;
 	unsigned int i;
+	unsigned int spend_count = 0;
+
+	for (i = 0; i < t->output_count; i++)
+		if (!t->output[i].unspendable)
+			spend_count++;
+
+	if (spend_count == 0)
+		return;
 
 	utxo = tal_alloc_(b, sizeof(*utxo) + (sizeof(utxo->amount[0]) + 1)
 			  * t->output_count, false, TAL_LABEL(struct utxo, ""));
 
 	memcpy(utxo->tx, t->sha256, sizeof(utxo->tx));
-	utxo->num_outputs = utxo->unspent_outputs = t->output_count;
+	utxo->num_outputs = t->output_count;
+	utxo->unspent_outputs = spend_count;
 	utxo->height = b->height;
 	utxo->timestamp = b->b->timestamp;
 	for (i = 0; i < utxo->num_outputs; i++)
