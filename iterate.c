@@ -782,9 +782,19 @@ int main(int argc, char *argv[])
 
 	/* Optimization: figure out if we need input/output scripts. */
 	read_scripts = false;
+	if (txfmt && strstr(txfmt, "%tX"))
+		read_scripts = true;
 	if (inputfmt && strstr(inputfmt, "%is"))
 		read_scripts = true;
+	if (inputfmt && strstr(inputfmt, "%iX"))
+		read_scripts = true;
+	if (inputfmt && strstr(inputfmt, "%tX"))
+		read_scripts = true;
 	if (outputfmt && strstr(outputfmt, "%os"))
+		read_scripts = true;
+	if (outputfmt && strstr(outputfmt, "%oX"))
+		read_scripts = true;
+	if (outputfmt && strstr(outputfmt, "%tX"))
 		read_scripts = true;
 	
 	/* Optimization: figure out of we have to maintain UTXO map */
