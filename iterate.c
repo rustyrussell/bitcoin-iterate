@@ -145,12 +145,21 @@ static void add_utxo(struct utxo_map *utxo_map,
 {
 	struct utxo *utxo;
 	unsigned int i;
+	unsigned int spend_count = 0;
+
+	for (i = 0; i < t->output_count; i++)
+		if (!t->output[i].unspendable)
+			spend_count++;
+
+	if (spend_count == 0)
+		return;
 
 	utxo = tal_alloc_(b, sizeof(*utxo) + (sizeof(utxo->amount[0]) + 1)
 			  * t->output_count, false, TAL_LABEL(struct utxo, ""));
 
 	memcpy(utxo->tx, t->sha256, sizeof(utxo->tx));
-	utxo->num_outputs = utxo->unspent_outputs = t->output_count;
+	utxo->num_outputs = t->output_count;
+	utxo->unspent_outputs = spend_count;
 	utxo->height = b->height;
 	utxo->timestamp = b->b->timestamp;
 	for (i = 0; i < utxo->num_outputs; i++)
@@ -514,6 +523,9 @@ static void print_format(const char *format,
 			case 'N':
 				printf("%zu", o - t->output);
 				break;
+			case 'U':
+				printf("%u", o->unspendable);
+				break;
 			case 'X':
 				dump_tx_output(o);
 				break;
@@ -606,8 +618,9 @@ int main(int argc, char *argv[])
 			   "  %oa: output amount\n"
 			   "  %ol: output script length\n"
 			   "  %os: output script as a hex string\n"
-			   "  %oN: output number",
-			   "  %oX: output in hex\n"
+			   "  %oN: output number\n"
+			   "  %oU: output is unspendable (0 if spendable)\n"
+			   "  %oX: output in hex\n",
 			   "Display help message");
 	opt_register_arg("--block", opt_set_charp, NULL, &blockfmt,
 			   "Format to print for each block");
@@ -782,9 +795,19 @@ int main(int argc, char *argv[])
 
 	/* Optimization: figure out if we need input/output scripts. */
 	read_scripts = false;
+	if (txfmt && strstr(txfmt, "%tX"))
+		read_scripts = true;
 	if (inputfmt && strstr(inputfmt, "%is"))
 		read_scripts = true;
+	if (inputfmt && strstr(inputfmt, "%iX"))
+		read_scripts = true;
+	if (inputfmt && strstr(inputfmt, "%tX"))
+		read_scripts = true;
 	if (outputfmt && strstr(outputfmt, "%os"))
+		read_scripts = true;
+	if (outputfmt && strstr(outputfmt, "%oX"))
+		read_scripts = true;
+	if (outputfmt && strstr(outputfmt, "%tX"))
 		read_scripts = true;
 	
 	/* Optimization: figure out of we have to maintain UTXO map */
