@@ -96,15 +96,24 @@ static void read_output(struct space *space, struct file *f, off_t *poff,
 			struct bitcoin_transaction_output *output,
 			bool read_scripts)
 {
+	char script_head = 0;
 	output->amount = pull_u64(f, poff);
 	output->script_length = pull_varint(f, poff);
 	if (read_scripts) {
 		output->script = space_alloc(space, output->script_length);
 		pull_bytes(f, poff, output->script, output->script_length);
+		if (output->script_length > 0)
+		    script_head = output->script[0];
 	} else {
 		output->script = NULL;
-		*poff += output->script_length;
+		if (output->script_length > 0) {
+		    pull_bytes(f, poff, &script_head, 1);
+		    *poff += output->script_length - 1;
+		} else {
+		    *poff += output->script_length;
+		}
 	}
+	output->unspendable = (script_head == 0x6A); /* OP_RETURN */
 }
 
 void read_bitcoin_transaction(struct space *space,

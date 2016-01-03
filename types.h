@@ -36,6 +36,7 @@ struct bitcoin_transaction_output {
 	u64 amount;
 	varint_t script_length;
 	u8 *script;
+	u8 unspendable; /* non-zero in known unspendable */
 };
 
 struct bitcoin_transaction_input {
