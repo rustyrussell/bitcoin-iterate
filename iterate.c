@@ -514,6 +514,9 @@ static void print_format(const char *format,
 			case 'N':
 				printf("%zu", o - t->output);
 				break;
+			case 'U':
+				printf("%u", o->unspendable);
+				break;
 			case 'X':
 				dump_tx_output(o);
 				break;
@@ -606,8 +609,9 @@ int main(int argc, char *argv[])
 			   "  %oa: output amount\n"
 			   "  %ol: output script length\n"
 			   "  %os: output script as a hex string\n"
-			   "  %oN: output number",
-			   "  %oX: output in hex\n"
+			   "  %oN: output number\n"
+			   "  %oU: output is unspendable (0 if spendable)\n"
+			   "  %oX: output in hex\n",
 			   "Display help message");
 	opt_register_arg("--block", opt_set_charp, NULL, &blockfmt,
 			   "Format to print for each block");

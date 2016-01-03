@@ -81,6 +81,7 @@ OPTIONS
   %ol: output script length
   %os: output script as a hex string.
   %oN: output number within transaction
+  %oU: output is unspendable (0==spendable)
   %oX: output as a hex string
 
 *--end-hash*::
