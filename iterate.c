@@ -142,6 +142,11 @@ static u8 *output_types(struct utxo *utxo)
 	return (u8 *)&utxo->amount[utxo->num_outputs];
 }
 
+static bool is_unspendable(const struct bitcoin_transaction_output *o)
+{
+	return (o->script_length > 0 && o->script[0] == OP_RETURN);
+}
+
 static void add_utxo(const tal_t *tal_ctx,
 		     struct utxo_map *utxo_map,
 		     const struct block *b,
@@ -519,6 +524,9 @@ static void print_format(const char *format,
 			case 'N':
 				printf("%zu", o - t->output);
 				break;
+			case 'U':
+				printf("%u", is_unspendable(o));
+				break;
 			case 'X':
 				dump_tx_output(o);
 				break;
@@ -754,8 +762,9 @@ int main(int argc, char *argv[])
 			   "  %oa: output amount\n"
 			   "  %ol: output script length\n"
 			   "  %os: output script as a hex string\n"
-			   "  %oN: output number",
-			   "  %oX: output in hex\n"
+			   "  %oN: output number\n"
+			   "  %oU: output is unspendable (0 if spendable)\n"
+			   "  %oX: output in hex\n",
 			   "Display help message");
 	opt_register_arg("--block", opt_set_charp, NULL, &blockfmt,
 			   "Format to print for each block");

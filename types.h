@@ -50,6 +50,7 @@ struct bitcoin_transaction_input {
 #define OP_PUSHDATA2	0x4D
 #define OP_PUSHDATA4	0x4E
 #define OP_NOP		0x61
+#define OP_RETURN	0x6A
 #define OP_DUP		0x76
 #define OP_EQUALVERIFY	0x88
 #define OP_CHECKSIG	0xAC
