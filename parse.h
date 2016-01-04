@@ -22,6 +22,5 @@ void skip_bitcoin_transactions(const struct bitcoin_block *b,
 /* ... read them in (call this repeatedly). Allocates off ctx. */
 void read_bitcoin_transaction(struct space *space,
 			      struct bitcoin_transaction *t,
-			      struct file *f, off_t *off,
-			      bool read_scripts);
+			      struct file *f, off_t *off);
 #endif /* BITCOIN_PARSE_PARSE_H */

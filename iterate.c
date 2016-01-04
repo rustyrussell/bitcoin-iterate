@@ -697,7 +697,7 @@ int main(int argc, char *argv[])
 		*inputfmt = NULL, *outputfmt = NULL, *cachedir = NULL;
 	size_t i, block_count = 0;
 	off_t last_discard;
-	bool quiet = false, needs_utxo, read_scripts, needs_fee;
+	bool quiet = false, needs_utxo, needs_fee;
 	unsigned long block_start = 0, block_end = -1UL;
 	struct block *b, *best, *genesis = NULL, *next, *start = NULL;
 	struct block_map block_map;
@@ -948,13 +948,6 @@ check_genesis:
 
 	utxo_map_init(&utxo_map);
 
-	/* Optimization: figure out if we need input/output scripts. */
-	read_scripts = false;
-	if (inputfmt && strstr(inputfmt, "%is"))
-		read_scripts = true;
-	if (outputfmt && strstr(outputfmt, "%os"))
-		read_scripts = true;
-	
 	/* Optimization: figure out of we have to maintain UTXO map */
 	needs_utxo = false;
 
@@ -1038,8 +1031,7 @@ check_genesis:
 			off_t txoff = off;
 
 			read_bitcoin_transaction(&space, &tx[i],
-						 block_file(b->filenum), &off,
-						 read_scripts);
+						 block_file(b->filenum), &off);
 
 			if (!start && txfmt)
 				print_format(txfmt, &utxo_map, b, &tx[i], i,
