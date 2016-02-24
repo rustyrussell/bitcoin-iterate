@@ -171,7 +171,7 @@ static void add_utxo(const tal_t *tal_ctx,
 	utxo->num_outputs = t->output_count;
 	utxo->unspent_outputs = spend_count;
 	utxo->height = b->height;
-	utxo->timestamp = b->b->timestamp;
+	utxo->timestamp = b->bh.timestamp;
 	for (i = 0; i < utxo->num_outputs; i++)
 		utxo->amount[i] = t->output[i].amount;
 	guess_output_types(t, output_types(utxo));
@@ -458,7 +458,7 @@ static void print_format(const char *format,
 				break;
 			case 'D':
 				printf("%"PRIi64,
-				       calculate_bdd(utxo_map, t, txnum == 0, b->b->timestamp));
+				       calculate_bdd(utxo_map, t, txnum == 0, b->bh.timestamp));
 				break;
 			case 'X':
 				dump_tx(t);
