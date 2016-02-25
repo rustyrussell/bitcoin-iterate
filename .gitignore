@@ -1,2 +1,4 @@
 *.o
 ccan/config.h
+bitcoin-iterate
+ccan/tools/configurator/configurator
