@@ -334,6 +334,30 @@ sum_outputs:
 	return total;
 }
 
+static s64 calculate_bdc(const struct utxo_map *utxo_map,
+			 u32 timestamp)
+{
+        u32 age;
+	u64 total_over = 0;
+	u64 total_base = 0;
+	struct utxo_map_iter it;
+	struct utxo *utxo;
+	u32 output_index = 0;
+	for (utxo = utxo_map_first(utxo_map, &it);
+	     utxo;
+	     utxo = utxo_map_next(utxo_map, &it)) {
+		age = timestamp > utxo->timestamp ? timestamp - utxo->timestamp : 0;
+		for (output_index = 0; output_index < utxo->num_outputs; output_index++) {
+			mul_and_add(&total_over, &total_base, utxo->amount[output_index], age);
+		}
+	}
+	/* we have satoshi-seconds, convert to satoshi days by dividing by */
+	/* 86400 */
+	if (total_over >= 86400/2)
+		return -2; /* overflow! */
+	return (((total_over << 47) / 86400) << 17) + (total_base / 86400);
+}
+
 static s64 calculate_bdd(const struct utxo_map *utxo_map,
 			  const struct bitcoin_transaction *t,
 			  bool is_coinbase, u32 timestamp)
@@ -419,6 +443,10 @@ static void print_format(const char *format,
 				break;
 			case 'N':
 				printf("%u", b->height);
+				break;
+			case 'C':
+				printf("%"PRIi64,
+				       calculate_bdc(utxo_map, b->bh.timestamp));
 				break;
 			case 'H':
 				dump_block_header(&b->bh);
@@ -742,6 +770,7 @@ int main(int argc, char *argv[])
 			   "  %bc: block transaction count\n"
 			   "  %bh: block hash\n"
 			   "  %bN: block height\n"
+			   "  %bC: block bitcoin days created (and destroyed)\n"
 			   "  %bH: block header (hex string)\n"
 			   "Valid transaction, input or output format:\n"
 			   "  %th: transaction hash\n"
@@ -969,15 +998,24 @@ check_genesis:
 	/* Optimization: figure out of we have to maintain UTXO map */
 	needs_utxo = false;
 
-	/* We need it for fee calculation (can be asked by tx, input
-	 * or output) or UTXO block number */
+	/* We need it for fee calculation, UTXO block number, or
+	 * bitcoin days created/destroyed.  Can be asked by block, tx,
+	 * input or output. */
+	if (blockfmt && strstr(blockfmt, "%bC"))
+		needs_utxo = true;
 	if (txfmt && strstr(txfmt, "%tF"))
 		needs_utxo = true;
 	if (txfmt && strstr(txfmt, "%tD"))
 		needs_utxo = true;
+	if (txfmt && strstr(txfmt, "%bC"))
+		needs_utxo = true;
+	if (blockfmt && strstr(blockfmt, "%bD"))
+		needs_utxo = true;
 	if (inputfmt && strstr(inputfmt, "%tF"))
 		needs_utxo = true;
 	if (inputfmt && strstr(inputfmt, "%tD"))
+		needs_utxo = true;
+	if (inputfmt && strstr(inputfmt, "%bC"))
 		needs_utxo = true;
 	if (inputfmt && strstr(inputfmt, "%iB"))
 		needs_utxo = true;
@@ -989,7 +1027,9 @@ check_genesis:
 		needs_utxo = true;
 	if (outputfmt && strstr(outputfmt, "%tD"))
 		needs_utxo = true;
-
+	if (outputfmt && strstr(outputfmt, "%bC"))
+		needs_utxo = true;
+	
 	needs_fee = needs_utxo;
 
 	/* Do we have cache utxo? */
@@ -1024,7 +1064,7 @@ check_genesis:
 		}
 
 		if (!start && blockfmt)
-			print_format(blockfmt, NULL, b, NULL, 0, NULL, NULL);
+			print_format(blockfmt, &utxo_map, b, NULL, 0, NULL, NULL);
 
 		if (!start && progress_marks
 		    && b->height % (best->height / progress_marks)
