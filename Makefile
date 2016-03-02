@@ -8,10 +8,12 @@ LDFLAGS = -O3 -flto
 LDLIBS := -lcrypto
 BIN_DIR := /usr/local/bin
 
-install: all
-	cp bitcoin-iterate $(BIN_DIR)/bitcoin-iterate
-
 all: bitcoin-iterate doc/bitcoin-iterate.1
+
+.PHONY: install
+
+install:
+	cp bitcoin-iterate $(BIN_DIR)/bitcoin-iterate
 
 $(CCAN_OBJS) $(ITERATE_OBJS): ccan/config.h
 
