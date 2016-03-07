@@ -91,9 +91,15 @@ struct utxo {
 	/* Reference count for this tx. */
 	u32 unspent_outputs;
 
+        /* Total amount unspent. */
+        u64 unspent;
+  
+        /* Total amount spent. */
+        u64 spent;
+
 	/* Amount for each output. */
 	u64 amount[];
-
+  
 	/* Followed by a char per output for UNKNOWN/PAYMENT/CHANGE */
 };
 
@@ -156,10 +162,15 @@ static void add_utxo(const tal_t *tal_ctx,
 	struct utxo *utxo;
 	unsigned int i;
 	unsigned int spend_count = 0;
+	u64 initial_spent = 0;
 
-	for (i = 0; i < t->output_count; i++)
-		if (!is_unspendable(&t->output[i]))
-			spend_count++;
+	for (i = 0; i < t->output_count; i++) {
+	  if (!is_unspendable(&t->output[i])) {
+	    spend_count++;
+	  } else {
+	    initial_spent += t->output[i].amount;
+	  }
+	}
 
 	if (spend_count == 0)
 		return;
@@ -171,9 +182,13 @@ static void add_utxo(const tal_t *tal_ctx,
 	utxo->num_outputs = t->output_count;
 	utxo->unspent_outputs = spend_count;
 	utxo->height = b->height;
-	utxo->timestamp = b->b->timestamp;
-	for (i = 0; i < utxo->num_outputs; i++)
+	utxo->timestamp = b->bh.timestamp;
+	utxo->unspent = 0;
+	utxo->spent  = initial_spent;
+	for (i = 0; i < utxo->num_outputs; i++) {
 		utxo->amount[i] = t->output[i].amount;
+	        utxo->unspent += t->output[i].amount;
+	}
 	guess_output_types(t, output_types(utxo));
 
 	utxo_map_add(utxo_map, utxo);
@@ -187,6 +202,8 @@ static void release_utxo(struct utxo_map *utxo_map,
 	utxo = utxo_map_get(utxo_map, i->hash);
 	if (!utxo)
 		errx(1, "Unknown utxo for "SHA_FMT, SHA_VALS(i->hash));
+
+	utxo->spent += utxo->amount[i->index];
 
 	if (--utxo->unspent_outputs == 0) {
 		utxo_map_del(utxo_map, utxo);
@@ -334,6 +351,20 @@ sum_outputs:
 	return total;
 }
 
+static s64 calculate_bdc(const struct utxo *u, u32 timestamp)
+{
+        u32 age;
+	u64 total_over = 0;
+	u64 total_base = 0;
+	age = ((timestamp > u->timestamp) ? (timestamp - u->timestamp) : 0);
+	mul_and_add(&total_over, &total_base, u->unspent, age);
+	/* we have satoshi-seconds, convert to satoshi days by dividing by */
+	/* 86400 */
+	if (total_over >= 86400/2)
+		return -2; /* overflow! */
+	return (((total_over << 47) / 86400) << 17) + (total_base / 86400);
+}
+
 static s64 calculate_bdd(const struct utxo_map *utxo_map,
 			  const struct bitcoin_transaction *t,
 			  bool is_coinbase, u32 timestamp)
@@ -377,7 +408,8 @@ static void print_format(const char *format,
 			 struct bitcoin_transaction *t,
 			 size_t txnum,
 			 struct bitcoin_transaction_input *i,
-			 struct bitcoin_transaction_output *o)
+			 struct bitcoin_transaction_output *o,
+			 struct utxo *u)
 {
 	const char *c;
 
@@ -458,7 +490,7 @@ static void print_format(const char *format,
 				break;
 			case 'D':
 				printf("%"PRIi64,
-				       calculate_bdd(utxo_map, t, txnum == 0, b->b->timestamp));
+				       calculate_bdd(utxo_map, t, txnum == 0, b->bh.timestamp));
 				break;
 			case 'X':
 				dump_tx(t);
@@ -538,6 +570,39 @@ static void print_format(const char *format,
 				break;
 			case 'X':
 				dump_tx_output(o);
+				break;
+			default:
+				goto bad_fmt;
+			}
+			break;
+		case 'u':
+			if (!u)
+				goto bad_fmt;
+			switch (c[2]) {
+			case 'h':
+			        print_hash(u->tx);
+			        break;
+			case 't':
+				printf("%u", u->timestamp);
+				break;
+			case 'c':
+				printf("%u", u->num_outputs);
+				break;
+			case 'u':
+				printf("%u", u->unspent_outputs);
+				break;
+			case 's':
+				printf("%u", u->num_outputs - u->unspent_outputs);
+				break;
+			case 'U':
+				printf("%"PRIu64, u->unspent);
+				break;
+			case 'S':
+				printf("%"PRIu64, u->spent);
+				break;
+			case 'C':
+				printf("%"PRIi64,
+				       calculate_bdc(u, b->bh.timestamp));
 				break;
 			default:
 				goto bad_fmt;
@@ -711,7 +776,7 @@ int main(int argc, char *argv[])
 {
 	void *tal_ctx = tal(NULL, char);
 	char *blockfmt = NULL, *txfmt = NULL,
-		*inputfmt = NULL, *outputfmt = NULL, *cachedir = NULL;
+	  *inputfmt = NULL, *outputfmt = NULL, *utxofmt = NULL, *cachedir = NULL;
 	size_t i, block_count = 0;
 	off_t last_discard;
 	bool quiet = false, needs_utxo, needs_fee;
@@ -727,10 +792,11 @@ int main(int argc, char *argv[])
 	u32 netmarker;
 	u8 tip[SHA256_DIGEST_LENGTH] = { 0 },
 		start_hash[SHA256_DIGEST_LENGTH] = { 0 };
+	unsigned int utxo_period = 144;
 
 	err_set_progname(argv[0]);
 	opt_register_noarg("-h|--help", opt_usage_and_exit,
-			   "\nValid block, transaction, input or output format:\n"
+			   "\nValid block, transaction, input, output, and utxo format:\n"
 			   "  <literal>: unquoted\n"
 			   "  %bl: block length\n"
 			   "  %bv: block version\n"
@@ -773,7 +839,16 @@ int main(int argc, char *argv[])
 			   "  %os: output script as a hex string\n"
 			   "  %oN: output number\n"
 			   "  %oU: output is unspendable (0 if spendable)\n"
-			   "  %oX: output in hex\n",
+			   "  %oX: output in hex\n"
+			   "Valid utxo format:\n"
+			   "  %uh: utxo transaction hash\n"
+			   "  %ut: utxo timestamp\n"
+			   "  %uc: utxo output count\n"
+			   "  %uu: utxo unspent output count\n"
+			   "  %us: utxo spent output count\n"
+			   "  %uU: utxo unspent amount\n"
+			   "  %uS: utxo spent amount\n"
+			   "  %uC: utxo bitcoin days created\n",
 			   "Display help message");
 	opt_register_arg("--block", opt_set_charp, NULL, &blockfmt,
 			   "Format to print for each block");
@@ -783,6 +858,10 @@ int main(int argc, char *argv[])
 			   "Format to print for each transaction input");
 	opt_register_arg("--output", opt_set_charp, NULL, &outputfmt,
 			   "Format to print for each transaction output");
+	opt_register_arg("--utxo", opt_set_charp, NULL, &utxofmt,
+			   "Format to print for each UTXO");
+	opt_register_arg("--utxo-period", opt_set_uintval, NULL,
+			 &utxo_period, "Loop over UTXOs every this many blocks");
 	opt_register_arg("--progress", opt_set_uintval, NULL,
 			 &progress_marks, "Print . to stderr this many times");
 	opt_register_noarg("--no-mmap", opt_set_invbool, &use_mmap,
@@ -969,11 +1048,14 @@ check_genesis:
 	/* Optimization: figure out of we have to maintain UTXO map */
 	needs_utxo = false;
 
-	/* We need it for fee calculation (can be asked by tx, input
-	 * or output) or UTXO block number */
+	/* We need it for fee calculation, UTXO block number, or
+	 * bitcoin days created/destroyed.  Can be asked by tx, input,
+	 * output, or UTXO. */
 	if (txfmt && strstr(txfmt, "%tF"))
 		needs_utxo = true;
 	if (txfmt && strstr(txfmt, "%tD"))
+		needs_utxo = true;
+	if (blockfmt && strstr(blockfmt, "%bD"))
 		needs_utxo = true;
 	if (inputfmt && strstr(inputfmt, "%tF"))
 		needs_utxo = true;
@@ -989,7 +1071,9 @@ check_genesis:
 		needs_utxo = true;
 	if (outputfmt && strstr(outputfmt, "%tD"))
 		needs_utxo = true;
-
+	if (utxofmt)
+		needs_utxo = true;
+	
 	needs_fee = needs_utxo;
 
 	/* Do we have cache utxo? */
@@ -1024,7 +1108,7 @@ check_genesis:
 		}
 
 		if (!start && blockfmt)
-			print_format(blockfmt, NULL, b, NULL, 0, NULL, NULL);
+		    print_format(blockfmt, &utxo_map, b, NULL, 0, NULL, NULL, NULL);
 
 		if (!start && progress_marks
 		    && b->height % (best->height / progress_marks)
@@ -1053,13 +1137,13 @@ check_genesis:
 
 			if (!start && txfmt)
 				print_format(txfmt, &utxo_map, b, &tx[i], i,
-					     NULL, NULL);
+					     NULL, NULL, NULL);
 
 			if (!start && inputfmt) {
 				for (j = 0; j < tx[i].input_count; j++) {
 					print_format(inputfmt, &utxo_map, b,
 						     &tx[i], i, &tx[i].input[j],
-						     NULL);
+						     NULL, NULL);
 				}
 			}
 
@@ -1067,7 +1151,7 @@ check_genesis:
 				for (j = 0; j < tx[i].output_count; j++) {
 					print_format(outputfmt, &utxo_map, b,
 						     &tx[i], i, NULL,
-						     &tx[i].output[j]);
+						     &tx[i].output[j], NULL);
 				}
 			}
 
@@ -1084,6 +1168,15 @@ check_genesis:
 				/* And add this tx's outputs to utxo */
 				add_utxo(tal_ctx, &utxo_map, b, &tx[i], i, txoff);
 			}
+		}
+		if (utxofmt && ((b->height % utxo_period) == 0)) {
+		  struct utxo_map_iter it;
+		  struct utxo *utxo;
+		  for (utxo = utxo_map_first(&utxo_map, &it);
+		       utxo;
+		       utxo = utxo_map_next(&utxo_map, &it)) {
+		    print_format(utxofmt, &utxo_map, b, NULL, 0, NULL, NULL, utxo);
+		  }
 		}
 	}
 	return 0;

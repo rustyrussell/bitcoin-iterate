@@ -6,8 +6,14 @@ CFLAGS = -O3 -flto -ggdb -I $(CCANDIR) -Wall
 LDFLAGS = -O3 -flto
 #CFLAGS = -ggdb -I $(CCANDIR) -Wall
 LDLIBS := -lcrypto
+BIN_DIR := /usr/local/bin
 
 all: bitcoin-iterate doc/bitcoin-iterate.1
+
+.PHONY: install
+
+install:
+	cp bitcoin-iterate $(BIN_DIR)/bitcoin-iterate
 
 $(CCAN_OBJS) $(ITERATE_OBJS): ccan/config.h
 
