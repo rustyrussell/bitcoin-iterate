@@ -30,6 +30,8 @@ struct bitcoin_transaction {
 	/* We calculate these as we read in transaction: */
 	u8 sha256[SHA256_DIGEST_LENGTH];
 	u32 len;
+	u32 block_height;
+	u32 block_length;
 };
 
 struct bitcoin_transaction_output {
