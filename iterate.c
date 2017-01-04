@@ -492,6 +492,12 @@ static void print_format(const char *format,
 				printf("%"PRIi64,
 				       calculate_bdd(utxo_map, t, txnum == 0, b->bh.timestamp));
 				break;
+			case 'H':
+				printf("%u", t->block_height);
+				break;
+			case 'L':
+				printf("%u", t->block_length);
+				break;
 			case 'X':
 				dump_tx(t);
 				break;
@@ -819,6 +825,8 @@ int main(int argc, char *argv[])
 			   "  %tN: transaction number\n"
 			   "  %tF: transaction fee paid\n"
 			   "  %tD: transaction bitcoin days destroyed\n"
+			   "  %tH: transaction block height\n"
+			   "  %tL: transaction block length\n"
 			   "  %tX: transaction in hex\n"
 			   "Valid input format:\n"
 			   "  %ia: input amount\n"
@@ -1135,9 +1143,13 @@ check_genesis:
 			read_bitcoin_transaction(&space, &tx[i],
 						 block_file(b->filenum), &off);
 
-			if (!start && txfmt)
+			if (!start && txfmt) {
+				tx[i].block_height = b->height;
+				tx[i].block_length = b->bh.len;
+
 				print_format(txfmt, &utxo_map, b, &tx[i], i,
 					     NULL, NULL, NULL);
+			}
 
 			if (!start && inputfmt) {
 				for (j = 0; j < tx[i].input_count; j++) {
