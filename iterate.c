@@ -85,6 +85,9 @@ struct utxo {
 	/* Height. */
 	unsigned int height;
 
+	/* txindex within block. */
+	unsigned int txnum;
+
 	/* Number of outputs. */
 	u32 num_outputs;
 
@@ -185,6 +188,7 @@ static void add_utxo(const tal_t *tal_ctx,
 	utxo->timestamp = b->bh.timestamp;
 	utxo->unspent = 0;
 	utxo->spent  = initial_spent;
+	utxo->txnum = txnum;
 	for (i = 0; i < utxo->num_outputs; i++) {
 		utxo->amount[i] = t->output[i].amount;
 	        utxo->unspent += t->output[i].amount;
@@ -537,6 +541,14 @@ static void print_format(const char *format,
 				} else
 					printf("0");
 				break;
+			case 'T':
+				/* Coinbase doesn't have valid input. */
+				if (txnum != 0) {
+					struct utxo *utxo = utxo_map_get(utxo_map, i->hash);
+					printf("%u", utxo->txnum);
+				} else
+					printf("-1");
+				break;
 			case 'p':
 				/* Coinbase doesn't have valid input. */
 				if (txnum != 0) {
@@ -829,6 +841,7 @@ int main(int argc, char *argv[])
 			   "  %iN: input number\n"
 			   "  %iX: input in hex\n"
 			   "  %iB: input UTXO block number (0 for coinbase)\n"
+			   "  %iT: input UTXO transaction number (-1 for coinbase)\n"
 			   "  %ip: input payment guess: same ("
 			    stringify(CHANGE_OUTPUT) ") or different ("
 			    stringify(PAYMENT_OUTPUT) ") owner, or ("
@@ -1062,6 +1075,8 @@ check_genesis:
 	if (inputfmt && strstr(inputfmt, "%tD"))
 		needs_utxo = true;
 	if (inputfmt && strstr(inputfmt, "%iB"))
+		needs_utxo = true;
+	if (inputfmt && strstr(inputfmt, "%iT"))
 		needs_utxo = true;
 	if (inputfmt && strstr(inputfmt, "%ia"))
 		needs_utxo = true;

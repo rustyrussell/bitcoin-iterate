@@ -70,6 +70,7 @@ OPTIONS
   %is: input script as a hex string
   %iN: input number within transaction
   %iB: input UTXO block number (0 for coinbase)
+  %iT: input UTXO transaction number (-1 for coinbase)
   %iX: input as a hex string
 
 *--output*='FORMAT'::
@@ -156,7 +157,7 @@ bitcoin-iterate --output=%bn,%th,%os
 
 NOTES
 -----
-Use of *%tF*, *%iB*, *%ia* or *%ip* significantly slows iteration, as
+Use of *%tF*, *%iB*, *%iT*, *%ia* or *%ip* significantly slows iteration, as
 this requires *bitcoin-iterate* to track unspent outputs.
 
 BUGS
