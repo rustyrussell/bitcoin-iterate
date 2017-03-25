@@ -519,6 +519,9 @@ static void print_format(const char *format,
 			case 's':
 				print_hex(i->script, i->script_length);
 				break;
+			case 'q':
+				printf("%u", i->sequence_number);
+				break;
 			case 'N':
 				printf("%zu", i - t->input);
 				break;
@@ -838,6 +841,7 @@ int main(int argc, char *argv[])
 			   "  %ii: input index\n"
 			   "  %il: input script length\n"
 			   "  %is: input script as a hex string\n"
+			   "  %iq: input nSequence\n"
 			   "  %iN: input number\n"
 			   "  %iX: input in hex\n"
 			   "  %iB: input UTXO block number (0 for coinbase)\n"
