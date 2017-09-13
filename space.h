@@ -3,9 +3,9 @@
 #include <ccan/tal/tal.h>
 #include <assert.h>
 
-/* Simple bump allocator: 3MB should be enough for 1MB blocks */
+/* Simple bump allocator: 5MB should be enough for 4MB blocks */
 struct space {
-	char buf[3 * 1024 * 1024];
+	char buf[5 * 1024 * 1024];
 	size_t off;
 };
 
