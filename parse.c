@@ -154,16 +154,21 @@ void read_bitcoin_transaction(struct space *space,
 			      struct file *f, off_t *poff)
 {
 	size_t i;
-	off_t start = *poff, hash_start = *poff;
+	const off_t start = *poff;
+	off_t hash_start = *poff;
 	SHA256_CTX sha256;
 	bool segwit = false;
 
 	SHA256_Init(&sha256);
 
 	trans->version = pull_u32(f, poff);
-	sha_add(&sha256, f, start, *poff - hash_start);
+	sha_add(&sha256, f, start, *poff - start);
+	u32 len = *poff - start;
+
 	hash_start = *poff;
+
 	trans->input_count = pull_varint(f, poff);
+
 
 	/* See BIP 144 */
 	if (trans->input_count == 0) {
@@ -176,6 +181,7 @@ void read_bitcoin_transaction(struct space *space,
 
 		/* Skip over for txid */
 		hash_start = *poff;
+		trans->input_count = pull_varint(f, poff);
 	}
 
 	trans->input = space_alloc_arr(space,
@@ -192,6 +198,7 @@ void read_bitcoin_transaction(struct space *space,
 
 	if (segwit) {
 		sha_add(&sha256, f, hash_start, *poff - hash_start);
+		len += *poff - hash_start;
 
 		read_script_witnesses(space, f, poff,
 				      trans->input, trans->input_count);
@@ -200,14 +207,17 @@ void read_bitcoin_transaction(struct space *space,
 		hash_start = *poff;
 	}
 	trans->lock_time = pull_u32(f, poff);
-	sha_add(&sha256, f, start, *poff - hash_start);
+	sha_add(&sha256, f, hash_start, *poff - hash_start);
+	len += *poff - hash_start;
 
 	/* Bitcoin uses double sha (it's not quite known why...) */
 	SHA256_Final(trans->sha256, &sha256);
 	SHA256_Init(&sha256);
 	SHA256_Update(&sha256, trans->sha256, sizeof(trans->sha256));
 	SHA256_Final(trans->sha256, &sha256);
-	trans->len = *poff - start;
+
+	trans->len = len;
+	trans->swlen = *poff - start;
 }
 
 /* Inefficient, but blk*.dat can have zero(?) padding. */
