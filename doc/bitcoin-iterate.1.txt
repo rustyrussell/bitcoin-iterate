@@ -54,7 +54,7 @@ OPTIONS
   %to: transaction output count
   %tt: transaction locktime
   %tl: transaction length (in vbytes)
-  %tw: transaction weigth (in sipa)
+  %tw: transaction weight (in sipa)
   %tF: transaction fee paid by block (negative for coinbase reward)
   %tN: transaction number within block
   %tD: transaction bitcoin days destroyed (by block times)

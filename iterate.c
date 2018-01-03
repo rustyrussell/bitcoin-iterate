@@ -851,7 +851,7 @@ int main(int argc, char *argv[])
 			   "  %to: transaction output count\n"
 			   "  %tt: transaction locktime\n"
 			   "  %tl: transaction length (in vbytes)\n"
-			   "  %tw: transaction weigth (in sipa)\n"
+			   "  %tw: transaction weight (in sipa)\n"
 			   "  %tN: transaction number\n"
 			   "  %tF: transaction fee paid\n"
 			   "  %tD: transaction bitcoin days destroyed\n"
