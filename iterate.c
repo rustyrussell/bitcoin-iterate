@@ -485,6 +485,15 @@ static void print_format(const char *format,
 			case 'l':
 				printf("%u", t->len);
 				break;
+			case 'L':
+				printf("%u", t->swlen);
+				break;
+			case 'W':
+				printf("%u", t->swlen + 3*t->len);
+				break;
+			case 'V':
+				printf("%u", (t->swlen + 3*t->len + 3) / 4);
+				break;
 			case 'N':
 				printf("%zu", txnum);
 				break;
