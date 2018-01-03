@@ -297,15 +297,8 @@ static bool set_height(struct block_map *block_map, struct block *b)
 	i = b;
 	do {
 		prev = block_map_get(block_map, i->bh.prev_hash);
-		if (!prev) {
-			warnx("Block "SHA_FMT" has unknown prev "SHA_FMT,
-			      SHA_VALS(i->sha),
-			      SHA_VALS(i->bh.prev_hash));
-			/* Remove it, and all children. */
-			for (; i; i = i->next)
-				block_map_del(block_map, i);
+		if (!prev)
 			return false;
-		}
 		prev->next = i;
 		i = prev;
 	} while (i->height == -1);
@@ -725,10 +718,12 @@ static void write_utxo_cache(const struct utxo_map *utxo_map,
 	}
 }
 
-static void add_block(struct block_map *block_map, struct block *b,
-		      struct block **genesis)
+/* Returns true if we know the height (ie. complete chain from genesis) */
+static bool add_block(struct block_map *block_map, struct block *b,
+		      struct block **genesis, size_t *num_misses)
 {
-	struct block *old = block_map_get(block_map, b->sha);
+	struct block *prev, *old = block_map_get(block_map, b->sha);
+
 	if (old) {
 		warnx("Already have "SHA_FMT" from %s %lu/%u",
 		      SHA_VALS(b->sha),
@@ -740,7 +735,28 @@ static void add_block(struct block_map *block_map, struct block *b,
 	if (is_zero(b->bh.prev_hash)) {
 		*genesis = b;
 		b->height = 0;
+		*num_misses = 0;
+		return true;
 	}
+
+	/* Optimistically search for previous: blocks usually in rough order */
+	prev = block_map_get(block_map, b->bh.prev_hash);
+	if (prev) {
+		if (prev->height != -1) {
+			b->height = prev->height + 1;
+			*num_misses = 0;
+			return true;
+		}
+
+		/* Every 1000 blocks we didn't get height for, try recursing. */
+		if ((*num_misses)++ % 1000 == 0) {
+			if (set_height(block_map, b)) {
+				*num_misses = 0;
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 static void read_blockcache(const tal_t *tal_ctx,
@@ -749,7 +765,7 @@ static void read_blockcache(const tal_t *tal_ctx,
 			    const char *blockcache,
 			    struct block **genesis)
 {
-	size_t i, num;
+	size_t i, num, num_misses = 0;
 	struct block *b = grab_file(tal_ctx, blockcache);
 
 	if (!b)
@@ -761,7 +777,7 @@ static void read_blockcache(const tal_t *tal_ctx,
 
 	block_map_init_sized(block_map, num);
 	for (i = 0; i < num; i++)
-		add_block(block_map, &b[i], genesis);
+		add_block(block_map, &b[i], genesis, &num_misses);
 }
 
 static void write_blockcache(struct block_map *block_map,
@@ -806,6 +822,7 @@ int main(int argc, char *argv[])
 	struct utxo_map utxo_map;
 	unsigned progress_marks = 0;
 	struct space space;
+	size_t num_misses = 0;
 	bool use_testnet = false;
 	u32 netmarker;
 	u8 tip[SHA256_DIGEST_LENGTH] = { 0 },
@@ -941,7 +958,7 @@ int main(int argc, char *argv[])
 		}
 	}
 	block_map_init(&block_map);
-	
+
 	for (i = 0; i < tal_count(block_fnames); i++) {
 		off_t off = 0;
 
@@ -984,7 +1001,12 @@ int main(int argc, char *argv[])
 			}
 
 			b->pos = off;
-			add_block(&block_map, b, &genesis);
+			if (add_block(&block_map, b, &genesis, &num_misses)) {
+				/* Go 100 past the block they asked
+				 * for (avoid minor forks) */
+				if (block_end != -1UL && b->height > block_end + 100)
+					goto check_genesis;
+			}
 
 			skip_bitcoin_transactions(&b->bh, block_start, &off);
 			if (off > last_discard + CHUNK && f->mmap) {
