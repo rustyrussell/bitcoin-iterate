@@ -1161,7 +1161,7 @@ check_genesis:
 			fprintf(stderr, ".");
 
 		/* Don't read transactions if we don't have to */
-		if (!txfmt && !inputfmt && !outputfmt)
+		if (!txfmt && !inputfmt && !outputfmt && !utxofmt)
 			continue;
 
 		/* If we haven't started and don't need to gather UTXO, skip */
