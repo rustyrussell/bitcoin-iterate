@@ -216,8 +216,8 @@ void read_bitcoin_transaction(struct space *space,
 	SHA256_Update(&sha256, trans->sha256, sizeof(trans->sha256));
 	SHA256_Final(trans->sha256, &sha256);
 
-	trans->len = len;
-	trans->swlen = *poff - start;
+	trans->non_swlen = len;
+	trans->total_len = *poff - start;
 }
 
 /* Inefficient, but blk*.dat can have zero(?) padding. */

@@ -483,16 +483,10 @@ static void print_format(const char *format,
 				printf("%u", t->lock_time);
 				break;
 			case 'l':
-				printf("%u", t->len);
+				printf("%u", (t->total_len + 3*t->non_swlen + 3) / 4);
 				break;
-			case 'L':
-				printf("%u", t->swlen);
-				break;
-			case 'W':
-				printf("%u", t->swlen + 3*t->len);
-				break;
-			case 'V':
-				printf("%u", (t->swlen + 3*t->len + 3) / 4);
+			case 'w':
+				printf("%u", t->total_len + 3*t->non_swlen);
 				break;
 			case 'N':
 				printf("%zu", txnum);
@@ -839,7 +833,8 @@ int main(int argc, char *argv[])
 			   "  %ti: transaction input count\n"
 			   "  %to: transaction output count\n"
 			   "  %tt: transaction locktime\n"
-			   "  %tl: transaction length\n"
+			   "  %tl: transaction length (in vbytes)\n"
+			   "  %tw: transaction weigth (in sipa)\n"
 			   "  %tN: transaction number\n"
 			   "  %tF: transaction fee paid\n"
 			   "  %tD: transaction bitcoin days destroyed\n"

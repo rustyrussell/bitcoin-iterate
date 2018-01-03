@@ -2,12 +2,12 @@
 .\"     Title: bitcoin-iterate
 .\"    Author: [see the "AUTHOR" section]
 .\" Generator: DocBook XSL Stylesheets v1.79.1 <http://docbook.sf.net/>
-.\"      Date: 03/25/2017
+.\"      Date: 01/03/2018
 .\"    Manual: \ \&
 .\"    Source: \ \&
 .\"  Language: English
 .\"
-.TH "BITCOIN\-ITERATE" "1" "03/25/2017" "\ \&" "\ \&"
+.TH "BITCOIN\-ITERATE" "1" "01/03/2018" "\ \&" "\ \&"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -78,7 +78,8 @@ Print out the format string for each transaction (in the order they are in the b
 %ti: transaction input count
 %to: transaction output count
 %tt: transaction locktime
-%tl: transaction length
+%tl: transaction length (in vbytes)
+%tw: transaction weigth (in sipa)
 %tF: transaction fee paid by block (negative for coinbase reward)
 %tN: transaction number within block
 %tD: transaction bitcoin days destroyed (by block times)
@@ -199,9 +200,9 @@ bitcoin\-iterate
 .sp
 bitcoin\-iterate \-\-block=\fI%bh %bl\fR
 .PP
-\fBExample\ \&3.\ \&Print out the block height and length of every transaction\fR
+\fBExample\ \&3.\ \&Print out the block height and weight of every transaction\fR
 .sp
-bitcoin\-iterate \-\-tx=\fIheight=%bh length=%tl\fR
+bitcoin\-iterate \-\-tx=\fIheight=%bh length=%tw\fR
 .PP
 \fBExample\ \&4.\ \&Print out the length of every scriptSig (input script)\fR
 .sp
