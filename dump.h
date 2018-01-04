@@ -5,6 +5,7 @@
 
 void print_hex(const void *data, size_t len);
 void print_hash(const u8 *hash);
+void print_reversed_hash(const u8 *hash);
 
 void dump_block_header(const struct bitcoin_block *b);
 void dump_tx(const struct bitcoin_transaction *tx);

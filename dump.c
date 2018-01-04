@@ -11,6 +11,16 @@ void print_hash(const u8 *hash)
 	fputs(str, stdout);
 }
 
+void print_reversed_hash(const u8 *hash)
+{
+	u8 reversed[32];
+	for(int i=0;i<32;++i) {
+		reversed[i]=hash[32-i-1];
+	}
+	print_hash(reversed);
+}
+
+
 void print_hex(const void *data, size_t len)
 {
 	char str[len * 2 + 1];

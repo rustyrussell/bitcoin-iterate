@@ -446,6 +446,9 @@ static void print_format(const char *format,
 			case 'h':
 				print_hash(b->sha);
 				break;
+			case 'B':
+				print_reversed_hash(b->sha);
+				break;
 			case 'N':
 				printf("%u", b->height);
 				break;
@@ -462,6 +465,9 @@ static void print_format(const char *format,
 			switch (c[2]) {
 			case 'h':
 				print_hash(t->sha256);
+				break;
+			case 'B':
+				print_reversed_hash(t->sha256);
 				break;
 			case 'v':
 				printf("%u", t->version);
@@ -842,10 +848,12 @@ int main(int argc, char *argv[])
 			   "  %bn: block nonce\n"
 			   "  %bc: block transaction count\n"
 			   "  %bh: block hash\n"
+               "  %bB: block hash big endian\n"
 			   "  %bN: block height\n"
 			   "  %bH: block header (hex string)\n"
 			   "Valid transaction, input or output format:\n"
 			   "  %th: transaction hash\n"
+               "  %tB: transaction hash big endian\n"
 			   "  %tv: transaction version\n"
 			   "  %ti: transaction input count\n"
 			   "  %to: transaction output count\n"
