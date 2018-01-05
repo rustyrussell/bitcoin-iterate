@@ -426,7 +426,7 @@ static void print_format(const char *format,
 				printf("%u", b->bh.version);
 				break;
 			case 'p':
-				print_hash(b->bh.prev_hash);
+				print_reversed_hash(b->bh.prev_hash);
 				break;
 			case 'm':
 				print_hash(b->bh.merkle_hash);
@@ -444,9 +444,6 @@ static void print_format(const char *format,
 				printf("%"PRIu64, b->bh.transaction_count);
 				break;
 			case 'h':
-				print_hash(b->sha);
-				break;
-			case 'B':
 				print_reversed_hash(b->sha);
 				break;
 			case 'N':
@@ -464,9 +461,6 @@ static void print_format(const char *format,
 				goto bad_fmt;
 			switch (c[2]) {
 			case 'h':
-				print_hash(t->sha256);
-				break;
-			case 'B':
 				print_reversed_hash(t->sha256);
 				break;
 			case 'v':
@@ -641,8 +635,16 @@ bad_fmt:
 
 static char *opt_set_hash(const char *arg, u8 *h)
 {
-	if (!hex_decode(arg, strlen(arg), h, SHA256_DIGEST_LENGTH))
+	size_t i;
+	u8 hash[SHA256_DIGEST_LENGTH];
+
+	if (!hex_decode(arg, strlen(arg), hash, SHA256_DIGEST_LENGTH))
 		return "Bad hex string (needs 64 hex chars)";
+
+	/* Backwards endian is the Bitcoin Way */
+	for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
+		h[i] = hash[SHA256_DIGEST_LENGTH-i-1];
+
 	return NULL;
 }
 
@@ -841,19 +843,17 @@ int main(int argc, char *argv[])
 			   "  <literal>: unquoted\n"
 			   "  %bl: block length\n"
 			   "  %bv: block version\n"
-			   "  %bp: block prev hash\n"
+			   "  %bp: block prev hash (big-endian)\n"
 			   "  %bm: block merkle hash\n"
 			   "  %bs: block timestamp\n"
 			   "  %bt: block target\n"
 			   "  %bn: block nonce\n"
 			   "  %bc: block transaction count\n"
-			   "  %bh: block hash\n"
-               "  %bB: block hash big endian\n"
+			   "  %bh: block hash (big-endian)\n"
 			   "  %bN: block height\n"
 			   "  %bH: block header (hex string)\n"
 			   "Valid transaction, input or output format:\n"
-			   "  %th: transaction hash\n"
-               "  %tB: transaction hash big endian\n"
+			   "  %th: transaction hash (big-endian)\n"
 			   "  %tv: transaction version\n"
 			   "  %ti: transaction input count\n"
 			   "  %to: transaction output count\n"
