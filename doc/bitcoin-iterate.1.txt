@@ -25,6 +25,10 @@ block iterates each transaction (from coinbase onwards in block
 order), and within that transaction iterates each input (in order),
 and then each output (in order).
 
+Note that bitcoin convention is to print block and transaction hashes
+backwards ("big-endian"): that convention is used here for compatibility
+with block explorers and bitcoind.
+
 OPTIONS
 -------
 *--block*='FORMAT'::
@@ -33,13 +37,13 @@ OPTIONS
 
   %bl: block length
   %bv: block version
-  %bp: block prev hash as a 64-character little-endian hex string
+  %bp: block prev hash as a 64-character big-endian hex string
   %bm: block merkle hash as a 64-character little-endian hex string
   %bs: block timestamp
   %bt: block target
   %bn: block nonce
   %bc: block transaction count
-  %bh: block hash as a 64-character little-endian hex string
+  %bh: block hash as a 64-character big-endian hex string
   %bN: block height (0 == genesis)
   %bH: block header as a hex string
 
@@ -48,7 +52,7 @@ OPTIONS
   are in the block).  All the block escape codes are valid, and the
   following additional ones:
 
-  %th: transaction hash as a 64-character little-endian hex string
+  %th: transaction hash as a 64-character big-endian hex string
   %tv: transaction version
   %ti: transaction input count
   %to: transaction output count
@@ -88,10 +92,10 @@ OPTIONS
   %oX: output as a hex string
 
 *--end-hash*::
-  Stop iteration at this block hash.
+  Stop iteration at this block hash (big-endian).
 
 *--start-hash*::
-  Start iteration at this block hash.
+  Start iteration at this block hash (big-endian).
 
 *--end*::
   Stop iteration at this block number (on longest chain).
