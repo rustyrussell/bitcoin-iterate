@@ -835,10 +835,12 @@ int main(int argc, char *argv[])
 	struct space space;
 	size_t num_misses = 0;
 	bool use_testnet = false;
+	bool use_regtest = false;
 	u32 netmarker;
 	u8 tip[SHA256_DIGEST_LENGTH] = { 0 },
 		start_hash[SHA256_DIGEST_LENGTH] = { 0 };
 	unsigned int utxo_period = 144;
+	enum networks network = MAIN;
 
 	err_set_progname(argv[0]);
 	opt_register_noarg("-h|--help", opt_usage_and_exit,
@@ -920,6 +922,8 @@ int main(int argc, char *argv[])
 			 "Don't output progress information");
 	opt_register_noarg("--testnet|-t", opt_set_bool, &use_testnet,
 			 "Look for testnet3 blocks");
+	opt_register_noarg("--regtest|-r", opt_set_bool, &use_regtest,
+			 "Look for regtest blocks");
 	opt_register_arg("--blockdir", opt_set_charp, NULL, &blockdir,
 			 "Block directory instead of ~/.bitcoin/[testnet3/]blocks");
 	opt_register_arg("--end-hash", opt_set_hash, NULL, tip,
@@ -939,11 +943,17 @@ int main(int argc, char *argv[])
 
 	if (use_testnet) {
 		netmarker = 0x0709110B;
+		network = TESTNET3;
+		
+	} else if (use_regtest) {
+		netmarker = 0xDAB5BFFA;
+		network = REGTEST;
 	} else {
 		netmarker = 0xD9B4BEF9;
+		network = MAIN;
 	}
 
-	block_fnames = block_filenames(tal_ctx, blockdir, use_testnet);
+	block_fnames = block_filenames(tal_ctx, blockdir, network);
 
 	if (cachedir && tal_count(block_fnames)) {
 		size_t last = tal_count(block_fnames) - 1;
