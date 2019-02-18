@@ -7,4 +7,4 @@ enum networks {
 };
 
 /* Return a tal_array of filenames. */
-char **block_filenames(tal_t *ctx, const char *base, unsigned int network);
+char **block_filenames(tal_t *ctx, const char *base, enum networks network);
