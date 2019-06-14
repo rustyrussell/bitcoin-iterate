@@ -21,8 +21,7 @@ static void add_name(char ***names_p, unsigned int num, char *name)
 	(*names_p)[num] = name;
 }
 
-char **block_filenames(tal_t *ctx, const char *path, bool testnet3)
-{
+char **block_filenames(tal_t *ctx, const char *path, enum networks network){
 	char **names = tal_arr(ctx, char *, 0);
 	char *tmp_ctx = tal_arr(ctx, char, 0);
 	DIR *dir;
@@ -38,8 +37,10 @@ char **block_filenames(tal_t *ctx, const char *path, bool testnet3)
 		}
 
 		base = path_join(tmp_ctx, base, ".bitcoin");
-		if (testnet3)
+		if (network == TESTNET3)
 			base = path_join(tmp_ctx, base, "testnet3");
+		if (network == REGTEST)
+			base = path_join(tmp_ctx, base, "regtest");
 
 		/* First try new-style: $HOME/.bitcoin/blocks/blk[0-9]*.dat. */
 		path = path_join(tmp_ctx, base, "blocks");
