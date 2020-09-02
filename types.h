@@ -1,7 +1,7 @@
 #ifndef BITCOIN_PARSE_TYPES_H
 #define BITCOIN_PARSE_TYPES_H
 #include <ccan/short_types/short_types.h>
-#include <openssl/sha.h>
+#include "sha256.h"
 
 /* We unpack varints for our in-memory representation */
 #define varint_t u64

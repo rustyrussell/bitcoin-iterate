@@ -1,11 +1,11 @@
-ITERATE_OBJS := iterate.o parse.o blockfiles.o io.o dump.o
+ITERATE_OBJS := iterate.o parse.o blockfiles.o io.o dump.o sha256.o
 #CCAN_OBJS := ccan-asort.o ccan-breakpoint.o ccan-tal.o ccan-tal-path.o ccan-tal-str.o ccan-take.o ccan-list.o ccan-str.o ccan-opt-helpers.o ccan-opt.o ccan-opt-parse.o ccan-opt-usage.o ccan-htable.o ccan-rbuf.o
 CCAN_OBJS := ccan-tal.o ccan-tal-path.o ccan-tal-str.o ccan-take.o ccan-list.o ccan-str.o ccan-opt-helpers.o ccan-opt.o ccan-opt-parse.o ccan-opt-usage.o ccan-htable.o ccan-rbuf.o ccan-hex.o ccan-tal-grab-file.o ccan-noerr.o
 CCANDIR=ccan/
 CFLAGS = -O3 -flto -ggdb -I $(CCANDIR) -Wall
 LDFLAGS = -O3 -flto
 #CFLAGS = -ggdb -I $(CCANDIR) -Wall
-LDLIBS := -lcrypto
+LDLIBS :=
 BIN_DIR := /usr/local/bin
 
 all: bitcoin-iterate doc/bitcoin-iterate.1

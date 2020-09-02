@@ -104,14 +104,14 @@ static void read_output(struct space *space, struct file *f, off_t *poff,
 	pull_bytes(f, poff, output->script, output->script_length);
 }
 
-static void sha_add(SHA256_CTX *sha256, struct file *f, off_t start, off_t len)
+static void sha_add(sha256_context *sha256, struct file *f, off_t start, off_t len)
 {
 	if (likely(f->mmap)) {
-		SHA256_Update(sha256, f->mmap + start, len);
+		sha256_write(sha256, f->mmap + start, len);
 	} else {
 		u8 *buf = tal_arr(NULL, u8, len);
 		file_read(f, start, len, buf);
-		SHA256_Update(sha256, buf, len);
+		sha256_write(sha256, buf, len);
 		tal_free(buf);
 	}
 }	
@@ -156,10 +156,10 @@ void read_bitcoin_transaction(struct space *space,
 	size_t i;
 	const off_t start = *poff;
 	off_t hash_start = *poff;
-	SHA256_CTX sha256;
+	sha256_context sha256;
 	bool segwit = false;
 
-	SHA256_Init(&sha256);
+	sha256_initialize(&sha256);
 
 	trans->version = pull_u32(f, poff);
 	sha_add(&sha256, f, start, *poff - start);
@@ -211,10 +211,10 @@ void read_bitcoin_transaction(struct space *space,
 	len += *poff - hash_start;
 
 	/* Bitcoin uses double sha (it's not quite known why...) */
-	SHA256_Final(trans->sha256, &sha256);
-	SHA256_Init(&sha256);
-	SHA256_Update(&sha256, trans->sha256, sizeof(trans->sha256));
-	SHA256_Final(trans->sha256, &sha256);
+	sha256_finalize(&sha256, trans->sha256);
+	sha256_initialize(&sha256);
+	sha256_write(&sha256, trans->sha256, sizeof(trans->sha256));
+	sha256_finalize(&sha256, trans->sha256);
 
 	trans->non_swlen = len;
 	trans->total_len = *poff - start;
@@ -243,7 +243,7 @@ read_bitcoin_block_header(struct bitcoin_block *block,
 			  u8 block_md[SHA256_DIGEST_LENGTH],
 			  const u32 marker)
 {
-	SHA256_CTX sha256;
+	sha256_context sha256;
 	off_t start;
 
 	block->D9B4BEF9 = pull_u32(f, off);
@@ -260,20 +260,20 @@ read_bitcoin_block_header(struct bitcoin_block *block,
 	block->nonce = pull_u32(f, off);
 
 	/* Bitcoin uses double sha (it's not quite known why...) */
-	SHA256_Init(&sha256);
+	sha256_initialize(&sha256);
 	if (likely(f->mmap)) {
-		SHA256_Update(&sha256, f->mmap + start, *off - start);
+		sha256_write(&sha256, f->mmap + start, *off - start);
 	} else {
 		u8 *buf = tal_arr(NULL, u8, *off - start);
 		file_read(f, start, *off - start, buf);
-		SHA256_Update(&sha256, buf, *off - start);
+		sha256_write(&sha256, buf, *off - start);
 		tal_free(buf);
 	}
-	SHA256_Final(block_md, &sha256);
+	sha256_finalize(&sha256, block_md);
 
-	SHA256_Init(&sha256);
-	SHA256_Update(&sha256, block_md, SHA256_DIGEST_LENGTH);
-	SHA256_Final(block_md, &sha256);
+	sha256_initialize(&sha256);
+	sha256_write(&sha256, block_md, SHA256_DIGEST_LENGTH);
+	sha256_finalize(&sha256, block_md);
 
 	block->transaction_count = pull_varint(f, off);
 
