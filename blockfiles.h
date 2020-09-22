@@ -3,7 +3,8 @@
 enum networks {
     MAIN,
     TESTNET3,
-    REGTEST
+    REGTEST,
+    SIGNET
 };
 
 /* Return a tal_array of filenames. */

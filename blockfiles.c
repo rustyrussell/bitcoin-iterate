@@ -41,6 +41,8 @@ char **block_filenames(tal_t *ctx, const char *path, enum networks network){
 			base = path_join(tmp_ctx, base, "testnet3");
 		if (network == REGTEST)
 			base = path_join(tmp_ctx, base, "regtest");
+		if (network == SIGNET)
+			base = path_join(tmp_ctx, base, "signet");
 
 		/* First try new-style: $HOME/.bitcoin/blocks/blk[0-9]*.dat. */
 		path = path_join(tmp_ctx, base, "blocks");
