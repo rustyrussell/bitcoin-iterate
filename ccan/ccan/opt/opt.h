@@ -185,7 +185,7 @@ void opt_register_table(const struct opt_table *table, const char *desc);
  * string (or see opt_set_alloc) and return false.
  *
  * Example:
- * static char *explode(const char *optarg, void *unused)
+ * static char *explode(const char *optarg, void *unused UNNEEDED)
  * {
  *	errx(1, "BOOM! %s", optarg);
  * }
@@ -227,6 +227,15 @@ void opt_register_table(const struct opt_table *table, const char *desc);
 #define opt_register_early_arg(names, cb, show, arg, desc)		\
 	_opt_register((names), OPT_CB_ARG((cb), OPT_EARLY, (show),(arg)), \
 		      (arg), (desc))
+
+/**
+ * opt_unregister - unregister an option.
+ * @names: the names it was registered with.
+ *
+ * This undoes opt_register[_early]_[no]arg.  Returns true if the option was
+ * found, otherwise false.
+ */
+bool opt_unregister(const char *names);
 
 /**
  * opt_parse - parse arguments.
@@ -285,6 +294,30 @@ bool opt_parse(int *argc, char *argv[], void (*errlog)(const char *fmt, ...));
  */
 bool opt_early_parse(int argc, char *argv[],
 		     void (*errlog)(const char *fmt, ...));
+
+/**
+ * opt_early_parse_incomplete - parse early arguments, ignoring unknown ones.
+ * @argc: argc
+ * @argv: argv array.
+ * @errlog: the function to print errors
+ *
+ * If you have plugins, you might need to do early parsing (eg. to find the
+ * plugin directory) but you don't know what options the plugins will want.
+ *
+ * Thus, this function is just like opt_early_parse, but ignores unknown options.
+ *
+ * Example:
+ *	if (!opt_early_parse_incomplete(argc, argv, opt_log_stderr)) {
+ *		printf("You screwed up, aborting!\n");
+ *		exit(1);
+ *	}
+ *
+ * See Also:
+ *	opt_early_parse()
+ */
+bool opt_early_parse_incomplete(int argc, char *argv[],
+				void (*errlog)(const char *fmt, ...));
+
 
 /**
  * opt_free_table - reset the opt library.
@@ -371,6 +404,22 @@ char *opt_invalid_argument(const char *arg);
  *			 "  But this won't because it's indented.");
  */
 char *opt_usage(const char *argv0, const char *extra);
+
+/**
+ * opt_usage_exit_fail - complain about bad usage to stderr, exit with status 1.
+ * @msg...: printf-style message to output.
+ *
+ * This prints argv[0] (if opt_parse has been called), a colon, then
+ * the message to stderr (just like errx()).  Then it prints out the
+ * usage message, taken from any registered option which uses
+ * opt_usage_and_exit() as described in opt_usage(argv0, NULL) above.
+ * Then it exits with status 1.
+ *
+ * Example:
+ *	if (argc != 5)
+ *		opt_usage_exit_fail("Need 5 arguments, only got %u", argc);
+ */
+void opt_usage_exit_fail(const char *msg, ...) NORETURN;
 
 /**
  * opt_hidden - string for undocumented options.

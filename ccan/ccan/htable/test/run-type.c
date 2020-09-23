@@ -65,7 +65,7 @@ static void find_vals(const struct htable_obj *ht,
 			return;
 		}
 	}
-	pass("Found %u numbers in hash", i);
+	ok1(htable_obj_count(ht) == i);
 }
 
 static void del_vals(struct htable_obj *ht,
@@ -83,7 +83,7 @@ static void del_vals(struct htable_obj *ht,
 }
 
 static void del_vals_bykey(struct htable_obj *ht,
-			   const struct obj val[], unsigned int num)
+			   const struct obj val[] UNNEEDED, unsigned int num)
 {
 	unsigned int i;
 
@@ -107,31 +107,33 @@ static bool check_mask(struct htable *ht, const struct obj val[], unsigned num)
 	return true;
 }
 
-int main(int argc, char *argv[])
+int main(void)
 {
 	unsigned int i;
-	struct htable_obj ht;
-	struct obj val[NUM_VALS];
+	struct htable_obj ht, ht2;
+	struct obj val[NUM_VALS], *result;
 	unsigned int dne;
 	void *p;
 	struct htable_obj_iter iter;
 
-	plan_tests(20);
+	plan_tests(35);
 	for (i = 0; i < NUM_VALS; i++)
 		val[i].key = i;
 	dne = i;
 
 	htable_obj_init(&ht);
-	ok1(ht.raw.max == 0);
+	ok1(htable_obj_count(&ht) == 0);
+	ok1(ht_max(&ht.raw) == 0);
 	ok1(ht.raw.bits == 0);
 
 	/* We cannot find an entry which doesn't exist. */
 	ok1(!htable_obj_get(&ht, &dne));
+	ok1(!htable_obj_pick(&ht, 0, NULL));
 
 	/* Fill it, it should increase in size. */
 	add_vals(&ht, val, NUM_VALS);
 	ok1(ht.raw.bits == NUM_BITS + 1);
-	ok1(ht.raw.max < (1 << ht.raw.bits));
+	ok1(ht_max(&ht.raw) < (1 << ht.raw.bits));
 
 	/* Mask should be set. */
 	ok1(ht.raw.common_mask != 0);
@@ -141,10 +143,16 @@ int main(int argc, char *argv[])
 	/* Find all. */
 	find_vals(&ht, val, NUM_VALS);
 	ok1(!htable_obj_get(&ht, &dne));
+	ok1(htable_obj_pick(&ht, 0, NULL));
+	ok1(htable_obj_pick(&ht, 0, &iter));
 
 	/* Walk once, should get them all. */
 	i = 0;
 	for (p = htable_obj_first(&ht,&iter); p; p = htable_obj_next(&ht, &iter))
+		i++;
+	ok1(i == NUM_VALS);
+	i = 0;
+	for (p = htable_obj_prev(&ht,&iter); p; p = htable_obj_prev(&ht, &iter))
 		i++;
 	ok1(i == NUM_VALS);
 
@@ -167,9 +175,42 @@ int main(int argc, char *argv[])
 	find_vals(&ht, val, NUM_VALS);
 	ok1(!htable_obj_get(&ht, &dne));
 
+	/* Check copy. */
+	ok1(htable_obj_copy(&ht2, &ht));
+
 	/* Delete them all by key. */
 	del_vals_bykey(&ht, val, NUM_VALS);
-	htable_obj_clear(&ht);
+	del_vals_bykey(&ht2, val, NUM_VALS);
 
+	/* Write two of the same value. */
+	val[1] = val[0];
+	htable_obj_add(&ht, &val[0]);
+	htable_obj_add(&ht, &val[1]);
+	i = 0;
+
+	result = htable_obj_getfirst(&ht, &i, &iter);
+	ok1(result == &val[0] || result == &val[1]);
+	if (result == &val[0]) {
+		ok1(htable_obj_getnext(&ht, &i, &iter) == &val[1]);
+		ok1(htable_obj_getnext(&ht, &i, &iter) == NULL);
+
+		/* Deleting first should make us iterate over the other. */
+		ok1(htable_obj_del(&ht, &val[0]));
+		ok1(htable_obj_getfirst(&ht, &i, &iter) == &val[1]);
+		ok1(htable_obj_getnext(&ht, &i, &iter) == NULL);
+	} else {
+		ok1(htable_obj_getnext(&ht, &i, &iter) == &val[0]);
+		ok1(htable_obj_getnext(&ht, &i, &iter) == NULL);
+
+		/* Deleting first should make us iterate over the other. */
+		ok1(htable_obj_del(&ht, &val[1]));
+		ok1(htable_obj_getfirst(&ht, &i, &iter) == &val[0]);
+		ok1(htable_obj_getnext(&ht, &i, &iter) == NULL);
+	}
+
+	htable_obj_clear(&ht);
+	ok1(htable_obj_count(&ht) == 0);
+	htable_obj_clear(&ht2);
+	ok1(htable_obj_count(&ht2) == 0);
 	return exit_status();
 }

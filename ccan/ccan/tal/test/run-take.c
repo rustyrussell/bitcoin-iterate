@@ -6,7 +6,7 @@ int main(void)
 {
 	char *parent, *c;
 
-	plan_tests(21);
+	plan_tests(22);
 
 	/* We can take NULL. */
 	ok1(take(NULL) == NULL);
@@ -26,17 +26,17 @@ int main(void)
 
 	c = tal(parent, char);
 	*c = 'h';
-	c = tal_dup(parent, char, take(c), 1, 0);
+	c = tal_dup(parent, char, take(c));
 	ok1(c[0] == 'h');
 	ok1(tal_parent(c) == parent);
 
-	c = tal_dup(parent, char, take(c), 1, 2);
+	c = tal_dup_arr(parent, char, take(c), 1, 2);
 	ok1(c[0] == 'h');
 	strcpy(c, "hi");
 	ok1(tal_parent(c) == parent);
 
 	/* dup must reparent child. */
-	c = tal_dup(NULL, char, take(c), 1, 0);
+	c = tal_dup(NULL, char, take(c));
 	ok1(c[0] == 'h');
 	ok1(tal_parent(c) == NULL);
 
@@ -44,12 +44,18 @@ int main(void)
 	tal_free(c);
 	ok1(tal_first(parent) == NULL);
 
+	/* tal_resize should return a taken pointer. */
+	c = take(tal_arr(parent, char, 5));
+	tal_resize(&c, 100);
+	ok1(taken(c));
+	tal_free(c);
+
 	tal_free(parent);
 	ok1(!taken_any());
 
 	/* NULL pass-through. */
 	c = NULL;
-	ok1(tal_dup(NULL, char, take(c), 5, 5) == NULL);
+	ok1(tal_dup_arr(NULL, char, take(c), 5, 5) == NULL);
 	ok1(!taken_any());
 
 	tal_cleanup();

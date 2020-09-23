@@ -13,12 +13,12 @@
  * License: CC0 (Public domain)
  *
  * Example:
- *	// Given foo/bar.c outputs basename is bar.c
+ *	// Given "foo/bar.c" outputs basename is bar.c
  *	#include <ccan/take/take.h>
  *	#include <string.h>
  *
  *	// Dumb basename program and driver.
- *	static char *base(const char *file)
+ *	static char *base(const char *file TAKES)
  *	{
  *		const char *p = strrchr(file, '/');
  *		if (!p) 
@@ -37,7 +37,7 @@
  *	{
  *		char *b;
  *
- *		if (argv[1]) // Mangle in place.
+ *		if (argc > 1) // Mangle in place.
  *			b = base(take(argv[1]));
  *		else
  *			b = base("test/string");
@@ -53,6 +53,7 @@ int main(int argc, char *argv[])
 
 	if (strcmp(argv[1], "depends") == 0) {
 		printf("ccan/likely\n");
+		printf("ccan/str\n");
 		return 0;
 	}
 

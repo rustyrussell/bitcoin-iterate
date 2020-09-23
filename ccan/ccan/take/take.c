@@ -1,16 +1,22 @@
 /* CC0 (Public domain) - see LICENSE file for details */
 #include <ccan/take/take.h>
 #include <ccan/likely/likely.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 static const void **takenarr;
+static const char **labelarr;
 static size_t max_taken, num_taken;
 static size_t allocfail;
 static void (*allocfailfn)(const void *p);
 
-void *take_(const void *p)
+void *take_(const void *p, const char *label)
 {
+	/* Overallocate: it's better than risking calloc returning NULL! */
+	if (unlikely(label && !labelarr))
+		labelarr = calloc(max_taken+1, sizeof(*labelarr));
+
 	if (unlikely(num_taken == max_taken)) {
 		const void **new;
 
@@ -25,9 +31,27 @@ void *take_(const void *p)
 			return (void *)p;
 		}
 		takenarr = new;
+		/* Once labelarr is set, we maintain it. */
+		if (labelarr) {
+                        const char **labelarr_new;
+			labelarr_new = realloc(labelarr,
+					       sizeof(*labelarr) * (max_taken+1));
+                        if (labelarr_new) {
+                                labelarr = labelarr_new;
+                        } else {
+                                /* num_taken will be out of sync with the size of
+                                 * labelarr after realloc failure.
+                                 * Just pretend that we never had labelarr allocated. */
+                                free(labelarr);
+                                labelarr = NULL;
+                        }
+                }
 		max_taken++;
 	}
+	if (unlikely(labelarr))
+		labelarr[num_taken] = label;
 	takenarr[num_taken++] = p;
+
 	return (void *)p;
 }
 
@@ -68,9 +92,23 @@ bool is_taken(const void *p)
 	return find_taken(p) > 0;
 }
 
-bool taken_any(void)
+const char *taken_any(void)
 {
-	return num_taken != 0;
+	static char pointer_buf[32];
+
+	if (num_taken == 0)
+		return NULL;
+
+	/* We're *allowed* to have some with labels, some without. */
+	if (labelarr) {
+		size_t i;
+		for (i = 0; i < num_taken; i++)
+			if (labelarr[i])
+				return labelarr[i];
+	}
+
+	sprintf(pointer_buf, "%p", takenarr[0]);
+	return pointer_buf;
 }
 
 void take_cleanup(void)
@@ -78,6 +116,8 @@ void take_cleanup(void)
 	max_taken = num_taken = 0;
 	free(takenarr);
 	takenarr = NULL;
+	free(labelarr);
+	labelarr = NULL;
 }
 
 void take_allocfail(void (*fn)(const void *p))

@@ -2,15 +2,15 @@
 #include <stdlib.h>
 
 /* Make sure we override these! */
-static void *no_malloc(size_t size)
+static void *no_malloc(size_t size UNNEEDED)
 {
 	abort();
 }
-static void *no_realloc(void *p, size_t size)
+static void *no_realloc(void *p UNNEEDED, size_t size UNNEEDED)
 {
 	abort();
 }
-static void no_free(void *p)
+static void no_free(void *p UNNEEDED)
 {
 	abort();
 }
@@ -66,8 +66,9 @@ static void freefn(void *ptr)
 int main(int argc, char *argv[])
 {
 	const char *myname = argv[0];
+	unsigned int val;
 
-	plan_tests(220);
+	plan_tests(222);
 
 	opt_set_alloc(allocfn, reallocfn, freefn);
 
@@ -340,6 +341,12 @@ int main(int argc, char *argv[])
 	ok1(strcmp(argv[3], "--") == 0);
 	ok1(strcmp(argv[4], "-a") == 0);
 	ok1(!argv[5]);
+
+	/* Finally, test the helpers don't use malloc. */
+	reset_options();
+	opt_register_arg("-a", opt_set_uintval, opt_show_uintval, &val, "a");
+	ok1(!parse_args(&argc, &argv, "-a", "notanumber", NULL));
+	ok1(strstr(err_output, ": -a: 'notanumber' is not a number"));
 
 	/* We should have tested each one at least once! */
 	ok1(realloc_count);

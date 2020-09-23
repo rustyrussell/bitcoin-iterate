@@ -4,11 +4,14 @@
 #include <sys/ioctl.h>
 #include <sys/termios.h> /* Required on Solaris for struct winsize */
 #endif
+#if HAVE_SYS_UNISTD_H
 #include <sys/unistd.h> /* Required on Solaris for ioctl */
+#endif
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdarg.h>
 #include "private.h"
 
 /* We only use this for pointer comparisons. */
@@ -107,7 +110,7 @@ static char *add_desc(char *base, size_t *len, size_t *max,
 
 	base = add_str(base, len, max, opt->names);
 	off = strlen(opt->names);
-	if (opt->type == OPT_HASARG
+	if ((opt->type & OPT_HASARG)
 	    && !strchr(opt->names, ' ')
 	    && !strchr(opt->names, '=')) {
 		base = add_str(base, len, max, " <arg>");
@@ -226,4 +229,18 @@ char *opt_usage(const char *argv0, const char *extra)
 	}
 	ret[len] = '\0';
 	return ret;
+}
+
+void opt_usage_exit_fail(const char *msg, ...)
+{
+	va_list ap;
+
+	if (opt_argv0)
+		fprintf(stderr, "%s: ", opt_argv0);
+	va_start(ap, msg);
+	vfprintf(stderr, msg, ap);
+	va_end(ap);
+	fprintf(stderr, "\n%s",
+		opt_usage(opt_argv0 ? opt_argv0 : "<program>", NULL));
+	exit(1);
 }
