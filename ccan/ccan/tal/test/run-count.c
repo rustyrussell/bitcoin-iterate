@@ -43,14 +43,18 @@ int main(void)
 
 	tal_set_backend(my_alloc, my_realloc, my_free, NULL);
 
-	plan_tests(19 * 3);
+	plan_tests(2 + 19 * 3);
+
+	p1 = NULL;
+	ok1(tal_bytelen(p1) == 0);
+	ok1(tal_count(p1) == 0);
 
 	for (i = 0; i < 3; i++) {
 		move = i;
 
 		p1 = tal(NULL, char);
 		ok1(p1);
-		ok1(tal_count(p1) == 0);
+		ok1(tal_count(p1) == 1);
 
 		p2 = tal_arr(p1, char, 1);
 		ok1(p2);

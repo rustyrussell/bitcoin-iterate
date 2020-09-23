@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <inttypes.h>
 
 struct node {
 	void *n;
@@ -177,15 +178,8 @@ static void do_tals(struct node *node)
 	unsigned int i;
 	static int count;
 
-	/* Tal pays a penalty for arrays, but we can't tell which is an array
-	 * and which isn't.  Grepping samba source gives 1221 talloc_array of
-	 * 33137 talloc occurrences, so conservatively assume 1 in 16 */
-	if (count++ % 16 == 0)
-		node->n = tal_arr(node->parent ? node->parent->n : NULL,
-				  char, node->len);
-	else
-		node->n = tal_alloc_(node->parent ? node->parent->n : NULL,
-				     node->len, false, TAL_LABEL(type, ""));
+	node->n = tal_arr(node->parent ? node->parent->n : NULL,
+			  char, node->len);
 
 	if (node->destructor)
 		tal_add_destructor(node->n, unused_tal_destructor);
@@ -253,7 +247,8 @@ static void dump_vsize(void)
 
 int main(int argc, char *argv[])
 {
-	struct timespec start, alloc_time, free_time;
+	struct timeabs start;
+	struct timerel alloc_time, free_time;
 	struct node *root;
 	unsigned int i;
 	FILE *f;
@@ -288,83 +283,91 @@ int main(int argc, char *argv[])
 	if (!run_malloc)
 		goto after_malloc;
 
-	alloc_time.tv_sec = alloc_time.tv_nsec = 0;
-	free_time.tv_sec = free_time.tv_nsec = 0;
+	alloc_time.ts.tv_sec = alloc_time.ts.tv_nsec = 0;
+	free_time.ts.tv_sec = free_time.ts.tv_nsec = 0;
 	for (i = 0; i < LOOPS; i++) {
 		start = time_now();
 		do_mallocs(root);
-		alloc_time = time_add(alloc_time, time_sub(time_now(), start));
+		alloc_time = timerel_add(alloc_time,
+					 time_between(time_now(), start));
 
 		start = time_now();
 		free_mallocs(root);
-		free_time = time_add(free_time, time_sub(time_now(), start));
+		free_time = timerel_add(free_time,
+					time_between(time_now(), start));
 	}
 	alloc_time = time_divide(alloc_time, i);
 	free_time = time_divide(free_time, i);
-	printf("Malloc time:             %lluns\n", time_to_nsec(alloc_time));
-	printf("Free time:               %lluns\n", time_to_nsec(free_time));
+	printf("Malloc time:             %"PRIu64"ns\n", time_to_nsec(alloc_time));
+	printf("Free time:               %"PRIu64"ns\n", time_to_nsec(free_time));
 
 after_malloc:
 	if (!run_talloc)
 		goto after_talloc;
 
-	alloc_time.tv_sec = alloc_time.tv_nsec = 0;
-	free_time.tv_sec = free_time.tv_nsec = 0;
+	alloc_time.ts.tv_sec = alloc_time.ts.tv_nsec = 0;
+	free_time.ts.tv_sec = free_time.ts.tv_nsec = 0;
 	for (i = 0; i < LOOPS; i++) {
 		start = time_now();
 		do_tallocs(root);
-		alloc_time = time_add(alloc_time, time_sub(time_now(), start));
+		alloc_time = timerel_add(alloc_time,
+					 time_between(time_now(), start));
 
 		start = time_now();
 		free_tallocs(root);
-		free_time = time_add(free_time, time_sub(time_now(), start));
+		free_time = timerel_add(free_time,
+					time_between(time_now(), start));
 	}
 	alloc_time = time_divide(alloc_time, i);
 	free_time = time_divide(free_time, i);
-	printf("Talloc time:             %lluns\n", time_to_nsec(alloc_time));
-	printf("talloc_free time:        %lluns\n", time_to_nsec(free_time));
+	printf("Talloc time:             %"PRIu64"ns\n", time_to_nsec(alloc_time));
+	printf("talloc_free time:        %"PRIu64"ns\n", time_to_nsec(free_time));
 
-	free_time.tv_sec = free_time.tv_nsec = 0;
+	free_time.ts.tv_sec = free_time.ts.tv_nsec = 0;
 	for (i = 0; i < LOOPS; i++) {
 		do_tallocs(root);
 
 		start = time_now();
 		talloc_free(root->n);
-		free_time = time_add(free_time, time_sub(time_now(), start));
+		free_time = timerel_add(free_time,
+					time_between(time_now(), start));
 	}
 	free_time = time_divide(free_time, i);
-	printf("Single talloc_free time: %lluns\n", time_to_nsec(free_time));
+	printf("Single talloc_free time: %"PRIu64"\n", time_to_nsec(free_time));
 
 after_talloc:
 	if (!run_tal)
 		goto after_tal;
 
-	alloc_time.tv_sec = alloc_time.tv_nsec = 0;
-	free_time.tv_sec = free_time.tv_nsec = 0;
+	alloc_time.ts.tv_sec = alloc_time.ts.tv_nsec = 0;
+	free_time.ts.tv_sec = free_time.ts.tv_nsec = 0;
 	for (i = 0; i < LOOPS; i++) {
 		start = time_now();
 		do_tals(root);
-		alloc_time = time_add(alloc_time, time_sub(time_now(), start));
+		alloc_time = timerel_add(alloc_time,
+					 time_between(time_now(), start));
 
 		start = time_now();
 		free_tals(root);
-		free_time = time_add(free_time, time_sub(time_now(), start));
+		free_time = timerel_add(free_time,
+					time_between(time_now(), start));
 	}
 	alloc_time = time_divide(alloc_time, i);
 	free_time = time_divide(free_time, i);
-	printf("Tal time:                %lluns\n", time_to_nsec(alloc_time));
-	printf("Tal_free time:           %lluns\n", time_to_nsec(free_time));
+	printf("Tal time:                %"PRIu64"ns\n", time_to_nsec(alloc_time));
+	printf("Tal_free time:           %"PRIu64"ns\n", time_to_nsec(free_time));
 
-	free_time.tv_sec = free_time.tv_nsec = 0;
+	free_time.ts.tv_sec = free_time.ts.tv_nsec = 0;
 	for (i = 0; i < LOOPS; i++) {
 		do_tals(root);
 
 		start = time_now();
 		tal_free(root->n);
-		free_time = time_add(free_time, time_sub(time_now(), start));
+		free_time = timerel_add(free_time,
+					time_between(time_now(), start));
 	}
 	free_time = time_divide(free_time, i);
-	printf("Single tal_free time:    %lluns\n", time_to_nsec(free_time));
+	printf("Single tal_free time:    %"PRIu64"ns\n", time_to_nsec(free_time));
 after_tal:
 
 	return 0;

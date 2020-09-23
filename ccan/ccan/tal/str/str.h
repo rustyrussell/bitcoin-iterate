@@ -13,8 +13,11 @@
  * tal_strdup - duplicate a string
  * @ctx: NULL, or tal allocated object to be parent.
  * @p: the string to copy (can be take()).
+ *
+ * The returned string will have tal_count() == strlen() + 1.
  */
-char *tal_strdup(const tal_t *ctx, const char *p);
+#define tal_strdup(ctx, p) tal_strdup_(ctx, p, TAL_LABEL(char, "[]"))
+char *tal_strdup_(const tal_t *ctx, const char *p TAKES, const char *label);
 
 /**
  * tal_strndup - duplicate a limited amount of a string.
@@ -23,23 +26,36 @@ char *tal_strdup(const tal_t *ctx, const char *p);
  * @n: the maximum length to copy.
  *
  * Always gives a nul-terminated string, with strlen() <= @n.
+ * The returned string will have tal_count() == strlen() + 1.
  */
-char *tal_strndup(const tal_t *ctx, const char *p, size_t n);
+#define tal_strndup(ctx, p, n) tal_strndup_(ctx, p, n, TAL_LABEL(char, "[]"))
+char *tal_strndup_(const tal_t *ctx, const char *p TAKES, size_t n,
+		   const char *label);
 
 /**
  * tal_fmt - allocate a formatted string
  * @ctx: NULL, or tal allocated object to be parent.
  * @fmt: the printf-style format (can be take()).
+ *
+ * The returned string will have tal_count() == strlen() + 1.
  */
-char *tal_fmt(const tal_t *ctx, const char *fmt, ...) PRINTF_FMT(2,3);
+#define tal_fmt(ctx, ...)				 \
+	tal_fmt_(ctx, TAL_LABEL(char, "[]"), __VA_ARGS__)
+char *tal_fmt_(const tal_t *ctx, const char *label, const char *fmt TAKES,
+	        ...) PRINTF_FMT(3,4);
 
 /**
  * tal_vfmt - allocate a formatted string (va_list version)
  * @ctx: NULL, or tal allocated object to be parent.
  * @fmt: the printf-style format (can be take()).
  * @va: the va_list containing the format args.
+ *
+ * The returned string will have tal_count() == strlen() + 1.
  */
-char *tal_vfmt(const tal_t *ctx, const char *fmt, va_list ap)
+#define tal_vfmt(ctx, fmt, va)				\
+	tal_vfmt_(ctx, fmt, va, TAL_LABEL(char, "[]"))
+char *tal_vfmt_(const tal_t *ctx, const char *fmt TAKES, va_list ap,
+		const char *label)
 	PRINTF_FMT(2,0);
 
 /**
@@ -48,8 +64,9 @@ char *tal_vfmt(const tal_t *ctx, const char *fmt, va_list ap)
  * @fmt: the printf-style format (can be take()).
  *
  * Returns false on allocation failure.
+ * Otherwise tal_count(*@baseptr) == strlen(*@baseptr) + 1.
  */
-bool tal_append_fmt(char **baseptr, const char *fmt, ...) PRINTF_FMT(2,3);
+bool tal_append_fmt(char **baseptr, const char *fmt TAKES, ...) PRINTF_FMT(2,3);
 
 /**
  * tal_append_vfmt - append a formatted string to a talloc string (va_list)
@@ -58,16 +75,21 @@ bool tal_append_fmt(char **baseptr, const char *fmt, ...) PRINTF_FMT(2,3);
  * @va: the va_list containing the format args.
  *
  * Returns false on allocation failure.
+ * Otherwise tal_count(*@baseptr) == strlen(*@baseptr) + 1.
  */
-bool tal_append_vfmt(char **baseptr, const char *fmt, va_list ap);
+bool tal_append_vfmt(char **baseptr, const char *fmt TAKES, va_list ap);
 
 /**
  * tal_strcat - join two strings together
  * @ctx: NULL, or tal allocated object to be parent.
  * @s1: the first string (can be take()).
  * @s2: the second string (can be take()).
+ *
+ * The returned string will have tal_count() == strlen() + 1.
  */
-char *tal_strcat(const tal_t *ctx, const char *s1, const char *s2);
+#define tal_strcat(ctx, s1, s2) tal_strcat_(ctx, s1, s2, TAL_LABEL(char, "[]"))
+char *tal_strcat_(const tal_t *ctx, const char *s1 TAKES, const char *s2 TAKES,
+		  const char *label);
 
 enum strsplit {
 	STR_EMPTY_OK,
@@ -109,8 +131,13 @@ enum strsplit {
  *		return long_lines;
  *	}
  */
-char **tal_strsplit(const tal_t *ctx,
-		    const char *string, const char *delims, enum strsplit flag);
+#define tal_strsplit(ctx, string, delims, flag)	\
+	tal_strsplit_(ctx, string, delims, flag, TAL_LABEL(char *, "[]"))
+char **tal_strsplit_(const tal_t *ctx,
+		     const char *string TAKES,
+		     const char *delims TAKES,
+		     enum strsplit flag,
+		     const char *label);
 
 enum strjoin {
 	STR_TRAIL,
@@ -128,6 +155,8 @@ enum strjoin {
  * return value is allocated using tal.  Each string in @strings is
  * followed by a copy of @delim.
  *
+ * The returned string will have tal_count() == strlen() + 1.
+ *
  * Example:
  *	// Append the string "--EOL" to each line.
  *	static char *append_to_all_lines(const char *string)
@@ -140,8 +169,13 @@ enum strjoin {
  *		return ret;
  *	}
  */
-char *tal_strjoin(const void *ctx, char *strings[], const char *delim,
-		  enum strjoin flags);
+#define tal_strjoin(ctx, strings, delim, flags)				\
+	tal_strjoin_(ctx, strings, delim, flags, TAL_LABEL(char, "[]"))
+char *tal_strjoin_(const void *ctx,
+		   char *strings[] TAKES,
+		   const char *delim TAKES,
+		   enum strjoin flags,
+		   const char *label);
 
 /**
  * tal_strreg - match/extract from a string via (extended) regular expressions.
@@ -159,18 +193,20 @@ char *tal_strjoin(const void *ctx, char *strings[], const char *delim,
  * non-existent matches (eg "([a-z]*)?") the pointer is set to NULL.
  *
  * Allocation failures or malformed regular expressions return false.
+ * The allocated strings will have tal_count() == strlen() + 1.
  *
  * See Also:
  *	regcomp(3), regex(3).
  *
  * Example:
- *	// Given 'My name is Rusty' outputs 'Hello Rusty!'
- *	// Given 'my first name is Rusty Russell' outputs 'Hello Rusty Russell!'
- *	// Given 'My name isnt Rusty Russell' outputs 'Hello there!'
+ *	// Given "My name is Rusty" outputs "Hello Rusty!\n"
+ *	// Given "my first name is Rusty Russell" outputs "Hello Rusty Russell!\n"
+ *	// Given "My name isnt Rusty Russell" outputs "Hello there!\n"
  *	int main(int argc, char *argv[])
  *	{
  *		char *person, *input;
  *
+ *		(void)argc;
  *		// Join args and trim trailing space.
  *		input = tal_strjoin(NULL, argv+1, " ", STR_NO_TRAIL);
  *		if (tal_strreg(NULL, input,
@@ -182,5 +218,8 @@ char *tal_strjoin(const void *ctx, char *strings[], const char *delim,
  *		return 0;
  *	}
  */
-bool tal_strreg(const void *ctx, const char *string, const char *regex, ...);
+#define tal_strreg(ctx, string, ...)					\
+	tal_strreg_(ctx, string, TAL_LABEL(char, "[]"), __VA_ARGS__)
+bool tal_strreg_(const void *ctx, const char *string TAKES,
+		 const char *label, const char *regex, ...);
 #endif /* CCAN_STR_TAL_H */

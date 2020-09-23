@@ -1,7 +1,6 @@
 /* Licensed under BSD-MIT - see LICENSE file for details */
 #include <ccan/tal/path/path.h>
 #include <ccan/str/str.h>
-#include <ccan/take/take.h>
 #include <ccan/tal/str/str.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -11,9 +10,6 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <assert.h>
-
-#define PATH_SEP_STR "/"
-#define PATH_SEP (PATH_SEP_STR[0])
 
 char *path_cwd(const tal_t *ctx)
 {
@@ -50,10 +46,10 @@ char *path_join(const tal_t *ctx, const char *base, const char *a)
 		goto out;
 
 	len = strlen(base);
-	ret = tal_dup(ctx, char, base, len, 1 + strlen(a) + 1);
+	ret = tal_dup_arr(ctx, char, base, len, 1 + strlen(a) + 1);
 	if (!ret)
 		goto out;
-	if (ret[len-1] != PATH_SEP)
+	if (len != 0 && ret[len-1] != PATH_SEP)
 		ret[len++] = PATH_SEP;
 	strcpy(ret + len, a);
 
@@ -306,7 +302,7 @@ fail_take_to:
 
  char *path_readlink(const tal_t *ctx, const char *linkname)
  {
-	ssize_t len, maxlen = 64; /* good first guess. */
+	ssize_t maxlen = 64; /* good first guess. */
 	char *ret = NULL;
 
 	if (unlikely(!linkname) && is_taken(linkname))
@@ -315,18 +311,19 @@ fail_take_to:
 	ret = tal_arr(ctx, char, maxlen + 1);
 
 	while (ret) {
-		len = readlink(linkname, ret, maxlen);
+		ssize_t len = readlink(linkname, ret, maxlen);
+
 		if (len < 0)
 			goto fail;
-		if (len < maxlen)
+
+		if (len < maxlen) {
+			ret[len] = '\0';
 			break;
+		}
 
 		if (!tal_resize(&ret, maxlen *= 2 + 1))
 			goto fail;
 	}
-
-	if (ret)
-		ret[len] = '\0';
 
 out:
 	if (taken(linkname))
@@ -465,7 +462,7 @@ char *path_basename(const tal_t *ctx, const char *path)
 static char *fixed_string(const tal_t *ctx,
 			  const char *str, const char *path)
 {
-	char *ret = tal_dup(ctx, char, path, 0, strlen(str)+1);
+	char *ret = tal_dup_arr(ctx, char, path, 0, strlen(str)+1);
 	if (ret)
 		strcpy(ret, str);
 	return ret;

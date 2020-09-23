@@ -10,7 +10,7 @@
 /* We use the number divided by two as the hash (for lots of
    collisions), plus set all the higher bits so we can detect if they
    don't get masked out. */
-static size_t hash(const void *elem, void *unused)
+static size_t hash(const void *elem, void *unused UNNEEDED)
 {
 	size_t h = *(uint64_t *)elem / 2;
 	h |= -1UL << NUM_BITS;
@@ -67,7 +67,7 @@ static void find_vals(struct htable *ht,
 			return;
 		}
 	}
-	pass("Found %llu numbers in hash", (long long)i);
+	ok1(htable_count(ht) == i);
 }
 
 static void del_vals(struct htable *ht,
@@ -95,7 +95,7 @@ static bool check_mask(struct htable *ht, uint64_t val[], unsigned num)
 	return true;
 }
 
-int main(int argc, char *argv[])
+int main(void)
 {
 	unsigned int i, weight;
 	uintptr_t perfect_bit;
@@ -105,13 +105,14 @@ int main(int argc, char *argv[])
 	void *p;
 	struct htable_iter iter;
 
-	plan_tests(35);
+	plan_tests(43);
 	for (i = 0; i < NUM_VALS; i++)
 		val[i] = i;
 	dne = i;
 
 	htable_init(&ht, hash, NULL);
-	ok1(ht.max == 0);
+	ok1(htable_count(&ht) == 0);
+	ok1(ht_max(&ht) == 0);
 	ok1(ht.bits == 0);
 
 	/* We cannot find an entry which doesn't exist. */
@@ -120,7 +121,7 @@ int main(int argc, char *argv[])
 	/* This should increase it once. */
 	add_vals(&ht, val, 0, 1);
 	ok1(ht.bits == 1);
-	ok1(ht.max == 1);
+	ok1(ht_max(&ht) == 1);
 	weight = 0;
 	for (i = 0; i < sizeof(ht.common_mask) * CHAR_BIT; i++) {
 		if (ht.common_mask & ((uintptr_t)1 << i)) {
@@ -133,10 +134,16 @@ int main(int argc, char *argv[])
 	/* Mask should be set. */
 	ok1(check_mask(&ht, val, 1));
 
+	/* htable_pick should always return that value */
+	ok1(htable_pick(&ht, 0, NULL) == val);
+	ok1(htable_pick(&ht, 1, NULL) == val);
+	ok1(htable_pick(&ht, 0, &iter) == val);
+	ok1(get_raw_ptr(&ht, ht.table[iter.off]) == val);
+	
 	/* This should increase it again. */
 	add_vals(&ht, val, 1, 1);
 	ok1(ht.bits == 2);
-	ok1(ht.max == 3);
+	ok1(ht_max(&ht) == 3);
 
 	/* Mask should be set. */
 	ok1(ht.common_mask != 0);
@@ -153,6 +160,11 @@ int main(int argc, char *argv[])
 	/* Walk once, should get them all. */
 	i = 0;
 	for (p = htable_first(&ht,&iter); p; p = htable_next(&ht, &iter))
+		i++;
+	ok1(i == NUM_VALS);
+
+	i = 0;
+	for (p = htable_prev(&ht, &iter); p; p = htable_prev(&ht, &iter))
 		i++;
 	ok1(i == NUM_VALS);
 
@@ -178,30 +190,33 @@ int main(int argc, char *argv[])
 	/* Corner cases: wipe out the perfect bit using bogus pointer. */
 	htable_clear(&ht);
 	htable_add(&ht, 0, (void *)((uintptr_t)&val[NUM_VALS-1]));
-	ok1(ht.perfect_bit);
-	perfect_bit = ht.perfect_bit;
+	ok1(ht_perfect_mask(&ht));
+	perfect_bit = ht_perfect_mask(&ht);
 	htable_add(&ht, 0, (void *)((uintptr_t)&val[NUM_VALS-1]
 				   | perfect_bit));
-	ok1(ht.perfect_bit == 0);
+	ok1(ht_perfect_mask(&ht) == 0);
 	htable_del(&ht, 0, (void *)((uintptr_t)&val[NUM_VALS-1] | perfect_bit));
 
 	/* Enlarging should restore it... */
 	add_vals(&ht, val, 0, NUM_VALS-1);
 
-	ok1(ht.perfect_bit != 0);
+	ok1(ht_perfect_mask(&ht) != 0);
 	htable_clear(&ht);
 
 	ok1(htable_init_sized(&ht, hash, NULL, 1024));
-	ok1(ht.max >= 1024);
+	ok1(ht_max(&ht) >= 1024);
 	htable_clear(&ht);
 
 	ok1(htable_init_sized(&ht, hash, NULL, 1023));
-	ok1(ht.max >= 1023);
+	ok1(ht_max(&ht) >= 1023);
 	htable_clear(&ht);
 
 	ok1(htable_init_sized(&ht, hash, NULL, 1025));
-	ok1(ht.max >= 1025);
+	ok1(ht_max(&ht) >= 1025);
 	htable_clear(&ht);
-	
+
+	ok1(htable_count(&ht) == 0);
+	ok1(htable_pick(&ht, 0, NULL) == NULL);
+
 	return exit_status();
 }

@@ -8,13 +8,13 @@
 
 /* We use the number divided by two as the hash (for lots of
    collisions). */
-static size_t hash(const void *elem, void *unused)
+static size_t hash(const void *elem, void *unused UNNEEDED)
 {
 	size_t h = *(uint64_t *)elem / 2;
 	return h;
 }
 
-int main(int argc, char *argv[])
+int main(void)
 {
 	struct htable ht;
 	uint64_t val[NUM_VALS];
@@ -26,8 +26,8 @@ int main(int argc, char *argv[])
 
 	htable_init(&ht, hash, NULL);
 	for (i = 0; i < NUM_VALS; i++) {
-		ok1(ht.max >= i);
-		ok1(ht.max <= i * 2);
+		ok1(ht_max(&ht) >= i);
+		ok1(ht_max(&ht) <= i * 2);
 		htable_add(&ht, hash(&val[i], NULL), &val[i]);
 	}
 	htable_clear(&ht);
