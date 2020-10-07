@@ -836,6 +836,7 @@ int main(int argc, char *argv[])
 	size_t num_misses = 0;
 	bool use_testnet = false;
 	bool use_regtest = false;
+	bool use_signet = false;
 	u32 netmarker;
 	u8 tip[SHA256_DIGEST_LENGTH] = { 0 },
 		start_hash[SHA256_DIGEST_LENGTH] = { 0 };
@@ -924,6 +925,8 @@ int main(int argc, char *argv[])
 			 "Look for testnet3 blocks");
 	opt_register_noarg("--regtest|-r", opt_set_bool, &use_regtest,
 			 "Look for regtest blocks");
+	opt_register_noarg("--signet|-s", opt_set_bool, &use_signet,
+			 "Look for signet blocks");
 	opt_register_arg("--blockdir", opt_set_charp, NULL, &blockdir,
 			 "Block directory instead of ~/.bitcoin/[testnet3/]blocks");
 	opt_register_arg("--end-hash", opt_set_hash, NULL, tip,
@@ -944,10 +947,12 @@ int main(int argc, char *argv[])
 	if (use_testnet) {
 		netmarker = 0x0709110B;
 		network = TESTNET3;
-		
 	} else if (use_regtest) {
 		netmarker = 0xDAB5BFFA;
 		network = REGTEST;
+	} else if (use_signet) {
+		netmarker = 0x40CF030A;
+		network = SIGNET;
 	} else {
 		netmarker = 0xD9B4BEF9;
 		network = MAIN;
