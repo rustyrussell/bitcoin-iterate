@@ -784,7 +784,7 @@ static void read_blockcache(const tal_t *tal_ctx,
 
 	num = (tal_count(b) - 1) / sizeof(*b);
 	if (!quiet)
-		printf("Adding %zu blocks from cache\n", num);
+		fprintf(stderr, "Adding %zu blocks from cache\n", num);
 
 	block_map_init_sized(block_map, num);
 	for (i = 0; i < num; i++)
@@ -974,7 +974,7 @@ int main(int argc, char *argv[])
 		if (stat(blockcache, &cache_st) == 0) {
 			if (block_st.st_mtime >= cache_st.st_mtime) {
 				if (!quiet)
-					printf("%s is newer than cache\n",
+					fprintf(stderr, "%s is newer than cache\n",
 					       block_fnames[last]);
 			} else {
 				read_blockcache(tal_ctx, quiet,
@@ -997,7 +997,7 @@ int main(int argc, char *argv[])
 		}
 
 		if (!quiet)
-			printf("bitcoin-iterate: processing %s (%zi/%zu)\n",
+			fprintf(stderr, "bitcoin-iterate: processing %s (%zi/%zu)\n",
 			       block_fnames[i], i+1, tal_count(block_fnames));
 
 		last_discard = off = 0;
@@ -1051,7 +1051,7 @@ int main(int argc, char *argv[])
 	if (blockcache) {
 		write_blockcache(&block_map, cachedir, blockcache);
 		if (!quiet)
-			printf("Wrote block cache to %s\n", blockcache);
+			fprintf(stderr, "Wrote block cache to %s\n", blockcache);
 	}
 
 check_genesis:
@@ -1084,7 +1084,7 @@ check_genesis:
 	}
 
 	if (!quiet)
-		printf("bitcoin-iterate: best block height: %u (of %zu)\n",
+		fprintf(stderr, "bitcoin-iterate: best block height: %u (of %zu)\n",
 		       best->height, block_count);
 
 	/* Now iterate down from best, setting next pointers. */
@@ -1153,9 +1153,9 @@ check_genesis:
 		if (read_utxo_cache(tal_ctx, &utxo_map, cachedir, start->sha)) {
 			needs_fee = false;
 			if (!quiet)
-				printf("Found valid UTXO cache\n");
+				fprintf(stderr, "Found valid UTXO cache\n");
 		} else if (!quiet)
-			printf("Did not find valid UTXO cache\n");
+			fprintf(stderr, "Did not find valid UTXO cache\n");
 	}
 
 	/* Now run forwards. */
@@ -1171,7 +1171,7 @@ check_genesis:
 					write_utxo_cache(&utxo_map, cachedir,
 							 b->sha);
 					if (!quiet)
-						printf("Wrote UTXO cache\n");
+						fprintf(stderr, "Wrote UTXO cache\n");
 				} else
 					/* We loaded cache, now we calc fee. */
 					needs_fee = true;
