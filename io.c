@@ -89,7 +89,7 @@ void file_open(struct file *f, const char *name, off_t len, int oflags)
 	f->len = st.st_size;
 	if (do_mmap) {
 		size = ((f->len + getpagesize()-1) & ~(getpagesize()-(off_t)1));
-		f->mmap = mmap(NULL, size, protflags, MAP_SHARED, f->fd, 0);
+		f->mmap = mmap(NULL, size, protflags | PROT_WRITE, MAP_PRIVATE, f->fd, 0);
 		if (f->mmap == MAP_FAILED)
 			f->mmap = NULL;
 	} else
