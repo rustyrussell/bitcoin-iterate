@@ -25,6 +25,11 @@
 #include "dump.h"
 #include "space.h"
 
+
+#define XOR_KEY_SIZE 8
+static uint8_t XOR_KEY[XOR_KEY_SIZE] = {0};
+static int USE_XOR = 0;
+
 #define SHA_FMT					   \
 	"%02x%02x%02x%02x%02x%02x%02x%02x"	   \
 	"%02x%02x%02x%02x%02x%02x%02x%02x"	   \
@@ -215,6 +220,27 @@ static void release_utxo(struct utxo_map *utxo_map,
 	}
 }
 
+static void xor_decode(uint8_t *data,
+			size_t size, const uint8_t *key, size_t key_len)
+{
+	for (size_t i = 0; i < size; ++i) {
+		data[i] ^= key[i % key_len];
+	}
+}
+
+static void load_xor_key(const char *path)
+{
+	FILE *f = fopen(path, "rb");
+	if (!f)
+		err(1, "Failed to open XOR key file: %s", path);
+
+	size_t r = fread(XOR_KEY, 1, XOR_KEY_SIZE, f);
+	if (r != XOR_KEY_SIZE)
+		err(1, "XOR key file too short: %s", path);
+
+	fclose(f);
+}
+
 #define CHUNK (128 * 1024 * 1024)
 
 static bool use_mmap = true;
@@ -238,8 +264,14 @@ static struct file *block_file(unsigned int index)
 	if (f[i].name)
 		file_close(&f[i]);
 
-	file_open(&f[i], block_fnames[index], 0,
-		  O_RDONLY | (use_mmap ? 0 : O_NO_MMAP));
+	file_open(&f[i], block_fnames[index], 0, O_RDONLY | (use_mmap ? 0 : O_NO_MMAP));
+
+	if (use_mmap && f[i].mmap && USE_XOR)
+		xor_decode((uint8_t *)f[i].mmap, f[i].len, XOR_KEY, XOR_KEY_SIZE);
+	else if (!use_mmap && USE_XOR) {
+		err(1, "Disabled mmap with non-empty blocks XOR key value is not supported.");
+	}
+
 	next++;
 	if (next == NUM_BLOCKFILES)
 		next = 0;
@@ -963,6 +995,29 @@ int main(int argc, char *argv[])
 	}
 
 	block_fnames = block_filenames(tal_ctx, blockdir, network);
+
+	/* Try to load the XOR key from the blockdir */
+	char *xor_key_path = path_join(NULL, blockdir, "xor.dat");
+	if (access(xor_key_path, F_OK) == 0) {
+		load_xor_key(xor_key_path);
+
+		if (!quiet) {
+			fprintf(stderr, "bitcoin-iterate: loaded 'blocks' XOR key: ");
+			for (size_t i = 0; i < sizeof(XOR_KEY); ++i)
+				fprintf(stderr, "%02x", XOR_KEY[i]);
+
+			fprintf(stderr, "\n");
+		}
+
+		for (int i = 0; i < XOR_KEY_SIZE; i++) {
+			if (XOR_KEY[i] != 0) {
+				USE_XOR = 1;
+				break;
+			}
+		}
+	}
+
+	tal_free(xor_key_path);
 
 	if (cachedir && tal_count(block_fnames)) {
 		size_t last = tal_count(block_fnames) - 1;
