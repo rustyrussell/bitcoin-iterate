@@ -19,6 +19,7 @@
 #include <assert.h>
 #include <inttypes.h>
 #include <errno.h>
+#include <ctype.h>
 #include "parse.h"
 #include "blockfiles.h"
 #include "io.h"
@@ -651,6 +652,120 @@ static char *opt_set_hash(const char *arg, u8 *h)
 	return NULL;
 }
 
+static bool is_all_digits(const char *p, size_t len)
+{
+	while (len--) {
+		if (!isdigit((unsigned char)*p++))
+			return false;
+	}
+	return true;
+}
+
+static bool validate_scid_line(const char *line, size_t len)
+{
+	/* Trim leading/trailing whitespace */
+	const char *start = line;
+	const char *end = line + len;
+	while (start < end && (*start == ' ' || *start == '\t' || *start == '\r'))
+		start++;
+	while (end > start && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r'))
+		end--;
+	if (start == end)
+		return true; /* allow empty lines */
+
+	/* Format: digits 'x' digits 'x' digits */
+	const char *p = start;
+	const char *x1 = memchr(p, 'x', end - p);
+	if (!x1 || x1 == p)
+		return false;
+	if (!is_all_digits(p, (size_t)(x1 - p)))
+		return false;
+	p = x1 + 1;
+	const char *x2 = memchr(p, 'x', end - p);
+	if (!x2 || x2 == p)
+		return false;
+	if (!is_all_digits(p, (size_t)(x2 - p)))
+		return false;
+	p = x2 + 1;
+	if (p >= end)
+		return false;
+	if (!is_all_digits(p, (size_t)(end - p)))
+		return false;
+	return true;
+}
+
+struct scid_req {
+	unsigned long height;
+	unsigned long txidx;
+	unsigned long outidx;
+	unsigned long original_index;
+	char *text;
+	bool found;
+	u64 amount_sat;
+};
+
+static int cmp_scid_hto(const void *ap, const void *bp)
+{
+	const struct scid_req *a = ap, *b = bp;
+	if (a->height != b->height)
+		return (a->height < b->height) ? -1 : 1;
+	if (a->txidx != b->txidx)
+		return (a->txidx < b->txidx) ? -1 : 1;
+	if (a->outidx != b->outidx)
+		return (a->outidx < b->outidx) ? -1 : 1;
+	return 0;
+}
+
+static int cmp_scid_original_index(const void *ap, const void *bp)
+{
+	const struct scid_req *a = ap, *b = bp;
+	if (a->original_index == b->original_index)
+		return 0;
+	return (a->original_index < b->original_index) ? -1 : 1;
+}
+
+static bool parse_scid_triplet(const char *line, size_t len,
+				   unsigned long *h,
+                                   unsigned long *t,
+                                   unsigned long *o,
+                                   char **text_out,
+                                   const tal_t *tal_ctx)
+{
+	const char *start = line;
+	const char *end = line + len;
+	while (start < end && (*start == ' ' || *start == '\t' || *start == '\r'))
+		start++;
+	while (end > start && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r'))
+		end--;
+	if (start == end) {
+		*text_out = tal_strdup(tal_ctx, "");
+		return true; /* Empty line allowed */
+	}
+	const char *x1 = memchr(start, 'x', (size_t)(end - start));
+	if (!x1)
+		return false;
+	const char *x2 = memchr(x1 + 1, 'x', (size_t)(end - (x1 + 1)));
+	if (!x2)
+		return false;
+	char *tmp;
+	unsigned long hh, tt, oo;
+	errno = 0;
+	hh = strtoul(start, &tmp, 10);
+	if (errno != 0 || tmp != x1)
+		return false;
+	errno = 0;
+	tt = strtoul(x1 + 1, &tmp, 10);
+	if (errno != 0 || tmp != x2)
+		return false;
+	errno = 0;
+	oo = strtoul(x2 + 1, &tmp, 10);
+	if (errno != 0 || tmp != end)
+		return false;
+	*h = hh; *t = tt; *o = oo;
+	*text_out = tal_strndup(tal_ctx, start, (size_t)(end - start));
+	return true;
+}
+
 static bool read_utxo_cache(const tal_t *ctx,
 			    struct utxo_map *utxo_map,
 			    const char *cachedir,
@@ -842,6 +957,11 @@ int main(int argc, char *argv[])
 		start_hash[SHA256_DIGEST_LENGTH] = { 0 };
 	unsigned int utxo_period = 144;
 	enum networks network = MAIN;
+	char *scid_file = NULL;
+	char *scid_out = NULL;
+	struct scid_req *scids = NULL;
+	size_t num_scids = 0;
+	size_t scid_pos = 0;
 
 	err_set_progname(argv[0]);
 	opt_register_noarg("-h|--help", opt_usage_and_exit,
@@ -939,10 +1059,73 @@ int main(int argc, char *argv[])
 			 "Block number to end at instead of longest chain.");
 	opt_register_arg("--cache", opt_set_charp, NULL, &cachedir,
 			 "Cache for multiple runs.");
+    opt_register_arg("--scid-file", opt_set_charp, NULL, &scid_file,
+                     "Path to file with SCIDs (one per line): <block-height>x<transaction-idx>x<output-idx>");
+    opt_register_arg("--scid-out", opt_set_charp, NULL, &scid_out,
+                     "Path to write SCID amounts (two columns)");
 	opt_parse(&argc, argv, opt_log_stderr_exit);
 
 	if (argc != 1)
 		opt_usage_and_exit(NULL);
+
+    if (scid_file) {
+        char *contents = grab_file(tal_ctx, scid_file);
+        if (!contents)
+            err(1, "Could not read %s", scid_file);
+        size_t len = tal_count(contents) - 1; /* includes trailing NUL */
+        const char *p = contents;
+        const char *end = contents + len;
+        unsigned long line_no = 1;
+        /* First pass: count non-empty valid lines */
+        while (p < end) {
+            const char *nl = memchr(p, '\n', (size_t)(end - p));
+            const char *line_end = nl ? nl : end;
+            if (!validate_scid_line(p, (size_t)(line_end - p)))
+                errx(1, "Invalid SCID format on line %lu", line_no);
+            /* check if not empty after trim */
+            const char *s = p, *e = line_end;
+            while (s < e && (*s == ' ' || *s == '\t' || *s == '\r')) s++;
+            while (e > s && (e[-1] == ' ' || e[-1] == '\t' || e[-1] == '\r')) e--;
+            if (s < e)
+                num_scids++;
+            line_no++;
+            if (!nl)
+                break;
+            p = nl + 1;
+        }
+        scids = tal_arr(tal_ctx, struct scid_req, num_scids);
+        for (size_t ii = 0; ii < num_scids; ii++) {
+            scids[ii].found = false;
+            scids[ii].amount_sat = 0;
+            scids[ii].text = NULL;
+            scids[ii].original_index = ii;
+        }
+        p = contents;
+        end = contents + len;
+        line_no = 1;
+        size_t idx = 0;
+        while (p < end) {
+            const char *nl = memchr(p, '\n', (size_t)(end - p));
+            const char *line_end = nl ? nl : end;
+            unsigned long h, t, o;
+            char *text;
+            if (!parse_scid_triplet(p, (size_t)(line_end - p), &h, &t, &o, &text, tal_ctx))
+                errx(1, "Invalid SCID format on line %lu", line_no);
+            if (text && *text) {
+                scids[idx].height = h;
+                scids[idx].txidx = t;
+                scids[idx].outidx = o;
+                scids[idx].text = text;
+                idx++;
+            }
+            line_no++;
+            if (!nl)
+                break;
+            p = nl + 1;
+        }
+        /* Sort by height/txidx/outidx */
+        qsort(scids, num_scids, sizeof(scids[0]), cmp_scid_hto);
+    }
 
 	if (use_testnet) {
 		netmarker = 0x0709110B;
@@ -1187,8 +1370,8 @@ check_genesis:
 		    == (best->height / progress_marks) - 1)
 			fprintf(stderr, ".");
 
-		/* Don't read transactions if we don't have to */
-		if (!txfmt && !inputfmt && !outputfmt && !utxofmt)
+		/* Don't read transactions if we don't have to, unless SCIDs need matching */
+		if (!txfmt && !inputfmt && !outputfmt && !utxofmt && num_scids == 0)
 			continue;
 
 		/* If we haven't started and don't need to gather UTXO, skip */
@@ -1227,6 +1410,17 @@ check_genesis:
 				}
 			}
 
+			/* SCID matching: we assume scids sorted by height,txidx,outidx */
+			while (scid_pos < num_scids && scids[scid_pos].height == (unsigned long)b->height && scids[scid_pos].txidx == (unsigned long)i) {
+				unsigned long target_out = scids[scid_pos].outidx;
+				if (target_out < tx[i].output_count) {
+					scids[scid_pos].amount_sat = tx[i].output[target_out].amount;
+					scids[scid_pos].found = true;
+				}
+				/* move to next scid with same h/tx or beyond */
+				scid_pos++;
+			}
+
 			if (needs_fee) {
 				/* Now we can release consumed utxos;
 				 * before there was a possibility of %tF */
@@ -1250,6 +1444,27 @@ check_genesis:
 		    print_format(utxofmt, &utxo_map, b, NULL, 0, NULL, NULL, utxo);
 		  }
 		}
+	}
+
+	/* If requested, write SCID results */
+	if (num_scids > 0) {
+		FILE *outf = stdout;
+		if (scid_out) {
+			outf = fopen(scid_out, "w");
+			if (!outf)
+				err(1, "Could not open %s for writing", scid_out);
+		}
+		/* Preserve input order: stable output by original listing */
+		struct scid_req *copy = tal_dup_arr(tal_ctx, struct scid_req, scids, num_scids, 0);
+		qsort(copy, num_scids, sizeof(copy[0]), cmp_scid_original_index);
+		for (size_t k = 0; k < num_scids; k++) {
+			if (copy[k].text && *copy[k].text) {
+				/* two columns: scid_text amount */
+				fprintf(outf, "%s\t%" PRIu64 "\n", copy[k].text, copy[k].found ? copy[k].amount_sat : 0);
+			}
+		}
+		if (outf != stdout)
+			fclose(outf);
 	}
 	return 0;
 }

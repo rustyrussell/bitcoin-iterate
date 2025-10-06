@@ -1,3 +1,4 @@
+/blocks/*
 *.o
 ccan/config.h
 bitcoin-iterate
