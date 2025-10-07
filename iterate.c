@@ -663,15 +663,18 @@ static bool is_all_digits(const char *p, size_t len)
 
 static bool validate_scid_line(const char *line, size_t len)
 {
-	/* Trim leading/trailing whitespace */
 	const char *start = line;
 	const char *end = line + len;
-	while (start < end && (*start == ' ' || *start == '\t' || *start == '\r'))
+	
+	/* Trim whitespace */
+	while (start < end && isspace((unsigned char)*start))
 		start++;
-	while (end > start && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r'))
+	while (end > start && isspace((unsigned char)end[-1]))
 		end--;
+	
+	/* Allow empty lines */
 	if (start == end)
-		return true; /* allow empty lines */
+		return true;
 
 	/* Format: digits 'x' digits 'x' digits */
 	const char *p = start;
@@ -680,79 +683,101 @@ static bool validate_scid_line(const char *line, size_t len)
 		return false;
 	if (!is_all_digits(p, (size_t)(x1 - p)))
 		return false;
+	
 	p = x1 + 1;
 	const char *x2 = memchr(p, 'x', end - p);
 	if (!x2 || x2 == p)
 		return false;
 	if (!is_all_digits(p, (size_t)(x2 - p)))
 		return false;
+	
 	p = x2 + 1;
 	if (p >= end)
 		return false;
 	if (!is_all_digits(p, (size_t)(end - p)))
 		return false;
+	
 	return true;
 }
 
 static bool parse_scid_triplet(const char *line, size_t len,
-				   unsigned long *h,
-                                   unsigned long *t,
-                                   unsigned long *o,
-                                   char **text_out,
-                                   const tal_t *tal_ctx)
+	unsigned long *h,
+	unsigned long *t,
+	unsigned long *o,
+	char **scid_str,
+	const tal_t *tal_ctx)
 {
 	const char *start = line;
 	const char *end = line + len;
-	while (start < end && (*start == ' ' || *start == '\t' || *start == '\r'))
-		start++;
-	while (end > start && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r'))
-		end--;
-	if (start == end) {
-		*text_out = tal_strdup(tal_ctx, "");
-		return true; /* Empty line allowed */
-	}
+
+	/* Trim whitespace */
+	while (start < end && isspace((unsigned char)*start))
+	start++;
+	while (end > start && isspace((unsigned char)end[-1]))
+	end--;
+
+	/* Empty line */
+	if (start == end)
+		return false;
+
+	/* Find the 'x' separators */
 	const char *x1 = memchr(start, 'x', (size_t)(end - start));
 	if (!x1)
 		return false;
 	const char *x2 = memchr(x1 + 1, 'x', (size_t)(end - (x1 + 1)));
 	if (!x2)
 		return false;
+
+	/* Parse the three numbers */
 	char *tmp;
-	unsigned long hh, tt, oo;
 	errno = 0;
-	hh = strtoul(start, &tmp, 10);
+	unsigned long hh = strtoul(start, &tmp, 10);
 	if (errno != 0 || tmp != x1)
 		return false;
+
 	errno = 0;
-	tt = strtoul(x1 + 1, &tmp, 10);
+	unsigned long tt = strtoul(x1 + 1, &tmp, 10);
 	if (errno != 0 || tmp != x2)
 		return false;
+
 	errno = 0;
-	oo = strtoul(x2 + 1, &tmp, 10);
+	unsigned long oo = strtoul(x2 + 1, &tmp, 10);
 	if (errno != 0 || tmp != end)
 		return false;
-	*h = hh; *t = tt; *o = oo;
-	*text_out = tal_strndup(tal_ctx, start, (size_t)(end - start));
+
+	*h = hh;
+	*t = tt;
+	*o = oo;
+
+	/* Store the original SCID string */
+	*scid_str = tal_strndup(tal_ctx, start, (size_t)(end - start));
+
 	return true;
 }
 
-static bool read_next_scid_fp(FILE *fp, const tal_t *tal_ctx,
-                              unsigned long *h,
-                              unsigned long *t,
-                              unsigned long *o,
-                              char **text_out)
+static bool read_next_scid(FILE *fp,
+	unsigned long *h,
+	unsigned long *t,
+	unsigned long *o,
+	char **scid_str,
+	const tal_t *tal_ctx)
 {
 	char *line = NULL;
 	size_t n = 0;
 	ssize_t r;
+
 	while ((r = getline(&line, &n, fp)) != -1) {
+		/* Validate first */
 		if (!validate_scid_line(line, (size_t)r))
 			continue;
-		if (parse_scid_triplet(line, (size_t)r, h, t, o, text_out, tal_ctx)) {
+
+		/* Try to parse */
+		if (parse_scid_triplet(line, (size_t)r, h, t, o, scid_str, tal_ctx)) {
 			free(line);
-			return (*text_out && **text_out);
+			return true;
 		}
 	}
+
 	free(line);
 	return false;
 }
@@ -1064,7 +1089,7 @@ int main(int argc, char *argv[])
         scid_fp = fopen(scid_file, "r");
         if (!scid_fp)
             err(1, "Could not open %s", scid_file);
-        have_scid = read_next_scid_fp(scid_fp, tal_ctx, &cur_h, &cur_t, &cur_o, &cur_scid_text);
+		have_scid = read_next_scid(scid_fp, &cur_h, &cur_t, &cur_o, &cur_scid_text, tal_ctx);
     }
 
 	if (use_testnet) {
@@ -1359,26 +1384,67 @@ check_genesis:
 			}
 
 			/* SCID matching: streaming from sorted file */
-			while (have_scid && (long)cur_h < b->height) {
-				/* cannot match in past blocks; advance to next scid */
-				have_scid = read_next_scid_fp(scid_fp, tal_ctx, &cur_h, &cur_t, &cur_o, &cur_scid_text);
-			}
-			if (have_scid && (unsigned long)b->height == cur_h) {
-				/* Consume all SCIDs for this block and current/next txs */
-				while (have_scid && (unsigned long)b->height == cur_h && (unsigned long)i == cur_t) {
-					unsigned long target_out = cur_o;
-					u64 amt = 0;
-					if (target_out < tx[i].output_count)
-						amt = tx[i].output[target_out].amount;
-					if (scid_outf && cur_scid_text && *cur_scid_text) {
-						fprintf(scid_outf, "%s:%u:%" PRIu64 "\n", cur_scid_text, b->bh.timestamp, amt);
-						if (!quiet && scid_outf != stdout)
-							fprintf(stdout, "%s:%u:%" PRIu64 "\n", cur_scid_text, b->bh.timestamp, amt);
+			if (have_scid) {
+				/* Skip blocks before current SCID */
+				if ((unsigned long)b->height < cur_h)
+					goto process_utxo;
+				
+				/* Process all SCIDs for current block */
+				if ((unsigned long)b->height == cur_h) {
+					/* Process all transactions up to current SCID */
+					if (i < cur_t)
+						goto process_utxo;
+					
+					/* We're at the right transaction, process matching SCIDs */
+					if (i == cur_t) {
+						while (have_scid && 
+							   (unsigned long)b->height == cur_h && 
+							   i == cur_t) {
+							
+							u64 amt = 0;
+							if (cur_o < tx[i].output_count)
+								amt = tx[i].output[cur_o].amount;
+							
+							/* Write output in format: <scid>:timestamp:amount */
+							if (scid_outf && cur_scid_text && *cur_scid_text) {
+								fprintf(scid_outf, "%s:%u:%" PRIu64 "\n",
+									cur_scid_text, 
+									b->bh.timestamp, amt);
+								
+								if (!quiet && scid_outf != stdout) {
+									fprintf(stdout, "%s:%u:%" PRIu64 "\n",
+										cur_scid_text,
+										b->bh.timestamp, amt);
+								}
+							}
+							
+							/* Free previous SCID text before reading next */
+							tal_free(cur_scid_text);
+							cur_scid_text = NULL;
+							
+							/* Read next SCID */
+							have_scid = read_next_scid(scid_fp, &cur_h, &cur_t, &cur_o, 
+										   &cur_scid_text, tal_ctx);
+						}
 					}
-					have_scid = read_next_scid_fp(scid_fp, tal_ctx, &cur_h, &cur_t, &cur_o, &cur_scid_text);
+				}
+				
+				/* If we've passed the current SCID block, advance to next valid SCID */
+				if ((unsigned long)b->height > cur_h) {
+					while (have_scid && (unsigned long)b->height > cur_h) {
+						if (!quiet)
+							warnx("SCID %s not found (block too high)",
+								  cur_scid_text ? cur_scid_text : "unknown");
+						
+						tal_free(cur_scid_text);
+						cur_scid_text = NULL;
+						have_scid = read_next_scid(scid_fp, &cur_h, &cur_t, &cur_o,
+									   &cur_scid_text, tal_ctx);
+					}
 				}
 			}
 
+			process_utxo:
 			if (needs_fee) {
 				/* Now we can release consumed utxos;
 				 * before there was a possibility of %tF */
@@ -1404,9 +1470,10 @@ check_genesis:
 		}
 	}
 
-	if (scid_outf && scid_outf != stdout)
-		fclose(scid_outf);
+	if (cur_scid_text)
+    	tal_free(cur_scid_text);
+	if (scid_fp)
+    	fclose(scid_fp);
 
-	/* No post-loop SCID write: we stream results during iteration */
 	return 0;
 }
