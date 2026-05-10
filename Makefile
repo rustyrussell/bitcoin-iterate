@@ -1,4 +1,5 @@
 ITERATE_OBJS := iterate.o parse.o blockfiles.o io.o dump.o
+UTXOSET_OBJS := utxoset-iterate.o io.o dump.o
 #CCAN_OBJS := ccan-asort.o ccan-breakpoint.o ccan-tal.o ccan-tal-path.o ccan-tal-str.o ccan-take.o ccan-list.o ccan-str.o ccan-opt-helpers.o ccan-opt.o ccan-opt-parse.o ccan-opt-usage.o ccan-htable.o ccan-rbuf.o
 CCAN_OBJS := ccan-tal.o ccan-tal-path.o ccan-tal-str.o ccan-take.o ccan-list.o ccan-str.o ccan-opt-helpers.o ccan-opt.o ccan-opt-parse.o ccan-opt-usage.o ccan-htable.o ccan-rbuf.o ccan-hex.o ccan-tal-grab-file.o ccan-noerr.o
 CCANDIR=ccan/
@@ -8,17 +9,20 @@ LDFLAGS = -O3 -flto
 LDLIBS := -lcrypto
 BIN_DIR := /usr/local/bin
 
-all: bitcoin-iterate doc/bitcoin-iterate.1
+all: bitcoin-iterate utxoset-iterate doc/bitcoin-iterate.1
 
 .PHONY: install
 
 install:
 	cp bitcoin-iterate $(BIN_DIR)/bitcoin-iterate
 
-$(CCAN_OBJS) $(ITERATE_OBJS): ccan/config.h
+$(CCAN_OBJS) $(ITERATE_OBJS) $(UTXOSET_OBJS): ccan/config.h
 
 bitcoin-iterate: $(ITERATE_OBJS) $(CCAN_OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(ITERATE_OBJS) $(CCAN_OBJS) $(LDLIBS)
+
+utxoset-iterate: $(UTXOSET_OBJS) $(CCAN_OBJS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(UTXOSET_OBJS) $(CCAN_OBJS) $(LDLIBS)
 
 doc/bitcoin-iterate.1: doc/bitcoin-iterate.1.txt
 	a2x --format=manpage $<
@@ -27,7 +31,7 @@ check:
 	$(MAKE) -C test check
 
 clean:
-	$(RM) bitcoin-iterate $(ITERATE_OBJS) $(CCAN_OBJS)
+	$(RM) bitcoin-iterate utxoset-iterate $(ITERATE_OBJS) $(UTXOSET_OBJS) $(CCAN_OBJS)
 
 distclean: clean
 	$(RM) ccan/config.h
