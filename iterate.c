@@ -498,6 +498,9 @@ static void print_format(const char *format,
 			case 'X':
 				dump_tx(t);
 				break;
+			case 'C':
+				printf("%u", txnum == 0);
+				break;
 			default:
 				goto bad_fmt;
 			}
@@ -871,6 +874,7 @@ int main(int argc, char *argv[])
 			   "  %tF: transaction fee paid\n"
 			   "  %tD: transaction bitcoin days destroyed\n"
 			   "  %tX: transaction in hex\n"
+			   "  %tC: transaction is coinbase (1 or 0)\n"
 			   "Valid input format:\n"
 			   "  %ia: input amount\n"
 			   "  %ih: input hash\n"

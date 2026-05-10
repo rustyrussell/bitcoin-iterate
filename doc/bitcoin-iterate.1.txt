@@ -64,6 +64,7 @@ OPTIONS
   %tN: transaction number within block
   %tD: transaction bitcoin days destroyed (by block times)
   %tX: transaction as a hex string (including inputs and outputs)
+  %tC: 1 if transaction is coinbase, 0 otherwise
 
 *--input*='FORMAT'::
   Print out the format string for each transaction input (in the order
