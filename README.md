@@ -1,5 +1,4 @@
-This is some fast code to iterate over bitcoind's block files to
-extract blockchain data from the main blockchain.
+This is some fast code to iterate over bitcoind's block files (or dumptxoutset output) to extract blockchain data from the main blockchain.
 
 ## To build:
 
@@ -48,6 +47,24 @@ This will produce output like:
 &hellip;
 
 You can see some examples by looking at the [manual page source](https://github.com/rustyrussell/bitcoin-iterate/blob/master/doc/bitcoin-iterate.1.txt).
+
+## utxoset-iterate
+
+`utxoset-iterate` reads a Bitcoin Core UTXO snapshot file (produced by the
+`dumptxoutset` RPC, Bitcoin Core v28+) and iterates over every unspent output.
+
+Dump all UTXOs as CSV (height, txid, vout, satoshis):
+
+	./utxoset-iterate --output='%bN,%th,%oN,%oa' utxo.dat
+
+Show only coinbase UTXOs:
+
+	./utxoset-iterate --output='%tC:%th:%oN %oa' utxo.dat | grep ^1: | cut -d: -f2-
+
+Format specifiers: `%bN` (block height), `%th` (txid), `%tC` (coinbase flag),
+`%oN` (vout index), `%oa` (amount in satoshis), `%ol` (script length), `%os` (script hex).
+
+See the [utxoset-iterate manual page source](https://github.com/rustyrussell/bitcoin-iterate/blob/master/doc/utxoset-iterate.1.txt) for full details.
 
 ## Enhancements
 

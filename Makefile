@@ -9,7 +9,7 @@ LDFLAGS = -O3 -flto
 LDLIBS := -lcrypto
 BIN_DIR := /usr/local/bin
 
-all: bitcoin-iterate utxoset-iterate doc/bitcoin-iterate.1
+all: bitcoin-iterate utxoset-iterate doc/bitcoin-iterate.1 doc/utxoset-iterate.1
 
 .PHONY: install
 
@@ -27,6 +27,9 @@ utxoset-iterate: $(UTXOSET_OBJS) $(CCAN_OBJS)
 doc/bitcoin-iterate.1: doc/bitcoin-iterate.1.txt
 	a2x --format=manpage $<
 
+doc/utxoset-iterate.1: doc/utxoset-iterate.1.txt
+	a2x --format=manpage $<
+
 check:
 	$(MAKE) -C test check
 
@@ -35,7 +38,7 @@ clean:
 
 distclean: clean
 	$(RM) ccan/config.h
-	$(RM) doc/bitcoin-iterate.1
+	$(RM) doc/bitcoin-iterate.1 doc/utxoset-iterate.1
 
 ccan/config.h: ccan/tools/configurator/configurator
 	$< > $@
