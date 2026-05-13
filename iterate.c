@@ -6,7 +6,6 @@
 #include <ccan/short_types/short_types.h>
 #include <ccan/opt/opt.h>
 #include <ccan/htable/htable_type.h>
-#include <ccan/rbuf/rbuf.h>
 #include <ccan/tal/str/str.h>
 #include <ccan/str/hex/hex.h>
 #include <ccan/tal/grab_file/grab_file.h>
