@@ -1,7 +1,9 @@
 #ifndef BITCOIN_PARSE_TYPES_H
 #define BITCOIN_PARSE_TYPES_H
+#include <stdbool.h>
+#include <ccan/crypto/sha256/sha256.h>
 #include <ccan/short_types/short_types.h>
-#include <openssl/sha.h>
+#include <string.h>
 
 /* We unpack varints for our in-memory representation */
 #define varint_t u64
@@ -11,8 +13,8 @@ struct bitcoin_block {
 	u32 D9B4BEF9;
 	u32 len;
 	u32 version;
-	u8 prev_hash[32];
-	u8 merkle_hash[32];
+	struct sha256 prev_hash;
+	struct sha256 merkle_hash;
 	u32 timestamp;
 	u32 target;
 	u32 nonce;
@@ -28,7 +30,7 @@ struct bitcoin_transaction {
 	u32 lock_time;
 
 	/* We calculate these as we read in transaction: */
-	u8 sha256[SHA256_DIGEST_LENGTH];
+	struct sha256 sha256;
 	/* Length of non-segwit part */
 	u32 non_swlen;
 	/* Total length, including segwit part */
@@ -42,7 +44,7 @@ struct bitcoin_transaction_output {
 };
 
 struct bitcoin_transaction_input {
-	u8 hash[32];
+	struct sha256 hash;
 	u32 index; /* output number referred to by above */
 	varint_t script_length;
 	u8 *script;
@@ -60,5 +62,10 @@ struct bitcoin_transaction_input {
 #define OP_EQUALVERIFY	0x88
 #define OP_CHECKSIG	0xAC
 #define OP_HASH160	0xA9
+
+static inline bool sha256_eq(const struct sha256 *a, const struct sha256 *b)
+{
+	return memcmp(a, b, sizeof(*a)) == 0;
+}
 
 #endif /* BITCOIN_PARSE_TYPES_H */

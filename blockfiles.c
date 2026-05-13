@@ -80,7 +80,7 @@ char **block_filenames(tal_t *ctx, const char *path, enum networks network,
 			     xordatfile,
 			     tal_bytelen(*xor_key) - 1);
 	} else if (errno != ENOENT)
-		err(1, "Cannot open %s: %s", xordatfile, strerror(errno));
+		err(1, "Cannot open %s", xordatfile);
 
 	tal_free(tmp_ctx);
 	

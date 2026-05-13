@@ -1,23 +1,21 @@
 #include "dump.h"
+#include <ccan/array_size/array_size.h>
 #include <ccan/str/hex/hex.h>
 #include <ccan/endian/endian.h>
 #include <stdio.h>
 
-void print_hash(const u8 *hash)
+void print_hash(const struct sha256 *hash)
 {
-	char str[hex_str_size(SHA256_DIGEST_LENGTH)];
+	char str[hex_str_size(sizeof(hash->u.u8))];
 
-	hex_encode(hash, SHA256_DIGEST_LENGTH, str, sizeof(str));
+	hex_encode(hash->u.u8, sizeof(hash->u.u8), str, sizeof(str));
 	fputs(str, stdout);
 }
 
-void print_reversed_hash(const u8 *hash)
+void print_reversed_hash(const struct sha256 *hash)
 {
-	u8 reversed[32];
-	for(int i=0;i<32;++i) {
-		reversed[i]=hash[32-i-1];
-	}
-	print_hash(reversed);
+	struct sha256 reversed = reverse_hash(hash);
+	print_hash(&reversed);
 }
 
 
@@ -73,7 +71,7 @@ static void print_le64(u64 v)
 
 void dump_tx_input(const struct bitcoin_transaction_input *input)
 {
-	print_hash(input->hash);
+	print_hash(&input->hash);
 	print_le32(input->index);
 	print_varint(input->script_length);
 	print_hex(input->script, input->script_length);
@@ -104,9 +102,19 @@ void dump_tx(const struct bitcoin_transaction *tx)
 void dump_block_header(const struct bitcoin_block *b)
 {
 	print_le32(b->version);
-	print_hash(b->prev_hash);
-	print_hash(b->merkle_hash);
+	print_hash(&b->prev_hash);
+	print_hash(&b->merkle_hash);
 	print_le32(b->timestamp);
 	print_le32(b->target);
 	print_le32(b->nonce);
+}
+
+struct sha256 reverse_hash(const struct sha256 *hash)
+{
+	struct sha256 reversed;
+
+	for (int i=0; i < ARRAY_SIZE(hash->u.u32); ++i)
+		reversed.u.u32[i] = bswap_32(hash->u.u32[ARRAY_SIZE(hash->u.u32)-i-1]);
+
+	return reversed;
 }

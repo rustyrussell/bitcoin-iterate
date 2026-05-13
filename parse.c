@@ -77,15 +77,15 @@ static u64 pull_u64(struct file *f, off_t *poff)
 	return le64_to_cpu(ret);
 }
 
-static void pull_hash(struct file *f, off_t *poff, u8 dst[32])
+static void pull_hash(struct file *f, off_t *poff, struct sha256 *dst)
 {
-	pull_bytes(f, poff, dst, 32);
+	pull_bytes(f, poff, dst->u.u8, sizeof(dst->u.u8));
 }
 
 static void read_input(struct space *space, struct file *f, off_t *poff,
 		       struct bitcoin_transaction_input *input)
 {
-	pull_hash(f, poff, input->hash);
+	pull_hash(f, poff, &input->hash);
 	input->index = pull_u32(f, poff);
 	input->script_length = pull_varint(f, poff);
 	input->script = space_alloc(space, input->script_length);
@@ -104,14 +104,14 @@ static void read_output(struct space *space, struct file *f, off_t *poff,
 	pull_bytes(f, poff, output->script, output->script_length);
 }
 
-static void sha_add(SHA256_CTX *sha256, struct file *f, off_t start, off_t len)
+static void sha_add(struct sha256_ctx *sha256, struct file *f, off_t start, off_t len)
 {
 	if (likely(f->mmap)) {
-		SHA256_Update(sha256, f->mmap + start, len);
+		sha256_update(sha256, f->mmap + start, len);
 	} else {
 		u8 *buf = tal_arr(NULL, u8, len);
 		file_read(f, start, len, buf);
-		SHA256_Update(sha256, buf, len);
+		sha256_update(sha256, buf, len);
 		tal_free(buf);
 	}
 }	
@@ -156,10 +156,10 @@ void read_bitcoin_transaction(struct space *space,
 	size_t i;
 	const off_t start = *poff;
 	off_t hash_start = *poff;
-	SHA256_CTX sha256;
+	struct sha256_ctx sha256;
 	bool segwit = false;
 
-	SHA256_Init(&sha256);
+	sha256_init(&sha256);
 
 	trans->version = pull_u32(f, poff);
 	sha_add(&sha256, f, start, *poff - start);
@@ -211,10 +211,10 @@ void read_bitcoin_transaction(struct space *space,
 	len += *poff - hash_start;
 
 	/* Bitcoin uses double sha (it's not quite known why...) */
-	SHA256_Final(trans->sha256, &sha256);
-	SHA256_Init(&sha256);
-	SHA256_Update(&sha256, trans->sha256, sizeof(trans->sha256));
-	SHA256_Final(trans->sha256, &sha256);
+	sha256_done(&sha256, &trans->sha256);
+	sha256_init(&sha256);
+	sha256_update(&sha256, trans->sha256.u.u8, sizeof(trans->sha256.u.u8));
+	sha256_done(&sha256, &trans->sha256);
 
 	trans->non_swlen = len;
 	trans->total_len = *poff - start;
@@ -240,10 +240,10 @@ bool next_block_header_prefix(struct file *f, off_t *off, const u32 marker)
 bool
 read_bitcoin_block_header(struct bitcoin_block *block,
 			  struct file *f, off_t *off,
-			  u8 block_md[SHA256_DIGEST_LENGTH],
+			  struct sha256 *block_md,
 			  const u32 marker)
 {
-	SHA256_CTX sha256;
+	struct sha256_ctx sha256;
 	off_t start;
 
 	block->D9B4BEF9 = pull_u32(f, off);
@@ -253,27 +253,27 @@ read_bitcoin_block_header(struct bitcoin_block *block,
 	/* Hash only covers version to nonce, inclusive. */
 	start = *off;
 	block->version = pull_u32(f, off);
-	pull_hash(f, off, block->prev_hash);
-	pull_hash(f, off, block->merkle_hash);
+	pull_hash(f, off, &block->prev_hash);
+	pull_hash(f, off, &block->merkle_hash);
 	block->timestamp = pull_u32(f, off);
 	block->target = pull_u32(f, off);
 	block->nonce = pull_u32(f, off);
 
 	/* Bitcoin uses double sha (it's not quite known why...) */
-	SHA256_Init(&sha256);
+	sha256_init(&sha256);
 	if (likely(f->mmap)) {
-		SHA256_Update(&sha256, f->mmap + start, *off - start);
+		sha256_update(&sha256, f->mmap + start, *off - start);
 	} else {
 		u8 *buf = tal_arr(NULL, u8, *off - start);
 		file_read(f, start, *off - start, buf);
-		SHA256_Update(&sha256, buf, *off - start);
+		sha256_update(&sha256, buf, *off - start);
 		tal_free(buf);
 	}
-	SHA256_Final(block_md, &sha256);
+	sha256_done(&sha256, block_md);
 
-	SHA256_Init(&sha256);
-	SHA256_Update(&sha256, block_md, SHA256_DIGEST_LENGTH);
-	SHA256_Final(block_md, &sha256);
+	sha256_init(&sha256);
+	sha256_update(&sha256, block_md->u.u8, sizeof(block_md->u.u8));
+	sha256_done(&sha256, block_md);
 
 	block->transaction_count = pull_varint(f, off);
 

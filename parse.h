@@ -12,7 +12,7 @@ bool next_block_header_prefix(struct file *f, off_t *off, const u32 marker);
 bool
 read_bitcoin_block_header(struct bitcoin_block *block,
 			  struct file *f, off_t *off,
-			  u8 block_md[SHA256_DIGEST_LENGTH],
+			  struct sha256 *block_md,
 			  const u32 marker);
 
 /* Step 3: Either skip all the transactions, or... */

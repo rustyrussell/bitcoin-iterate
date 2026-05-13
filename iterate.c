@@ -1,5 +1,6 @@
 /* GPLv2 or later, see LICENSE */
 #include <ccan/err/err.h>
+#include <ccan/mem/mem.h>
 #include <ccan/tal/tal.h>
 #include <ccan/tal/path/path.h>
 #include <ccan/take/take.h>
@@ -33,13 +34,17 @@ static u8 *xor_key;
 	"%02x%02x%02x%02x%02x%02x%02x%02x"
 
 #define SHA_VALS(e)							\
-	e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7],			\
-		e[8], e[9], e[10], e[11], e[12], e[13], e[14], e[15],	\
-		e[16], e[17], e[18], e[19], e[20], e[21], e[22], e[23], \
-		e[24], e[25], e[26], e[27], e[28], e[29], e[30], e[31]
+	(e.u.u8)[0], (e.u.u8)[1], (e.u.u8)[2], (e.u.u8)[3],		\
+	(e.u.u8)[4], (e.u.u8)[5], (e.u.u8)[6], (e.u.u8)[7],		\
+	(e.u.u8)[8], (e.u.u8)[9], (e.u.u8)[10], (e.u.u8)[11],		\
+	(e.u.u8)[12], (e.u.u8)[13], (e.u.u8)[14], (e.u.u8)[15],		\
+	(e.u.u8)[16], (e.u.u8)[17], (e.u.u8)[18], (e.u.u8)[19],		\
+	(e.u.u8)[20], (e.u.u8)[21], (e.u.u8)[22], (e.u.u8)[23],		\
+	(e.u.u8)[24], (e.u.u8)[25], (e.u.u8)[26], (e.u.u8)[27],		\
+	(e.u.u8)[28], (e.u.u8)[29], (e.u.u8)[30], (e.u.u8)[31]
 
 struct block {
-	u8 sha[SHA256_DIGEST_LENGTH];
+	struct sha256 sha;
 	s32 height; /* -1 for not-yet-known */
 	/* Where is it */
 	unsigned int filenum;
@@ -52,12 +57,12 @@ struct block {
 };
 
 /* Hash blocks by sha */
-static const u8 *keyof_block_map(const struct block *b)
+static const struct sha256 *keyof_block_map(const struct block *b)
 {
-	return b->sha;
+	return &b->sha;
 }
 
-static size_t hash_sha(const u8 *key)
+static size_t hash_sha(const struct sha256 *key)
 {
 	size_t ret;
 
@@ -65,9 +70,9 @@ static size_t hash_sha(const u8 *key)
 	return ret;
 }
 
-static bool block_eq(const struct block *b, const u8 *key)
+static bool block_eq(const struct block *b, const struct sha256 *key)
 {
-	return memcmp(b->sha, key, sizeof(b->sha)) == 0;
+	return sha256_eq(&b->sha, key);
 }
 HTABLE_DEFINE_TYPE(struct block, keyof_block_map, hash_sha, block_eq,
 		   block_map);
@@ -78,7 +83,7 @@ HTABLE_DEFINE_TYPE(struct block, keyof_block_map, hash_sha, block_eq,
 
 struct utxo {
 	/* txid */
-	u8 tx[SHA256_DIGEST_LENGTH];
+	struct sha256 txid;
 
 	/* Timestamp. */
 	u32 timestamp;
@@ -107,14 +112,14 @@ struct utxo {
 	/* Followed by a char per output for UNKNOWN/PAYMENT/CHANGE */
 };
 
-static const u8 *keyof_utxo(const struct utxo *utxo)
+static const struct sha256 *keyof_utxo(const struct utxo *utxo)
 {
-	return utxo->tx;
+	return &utxo->txid;
 }
 
-static bool utxohash_eq(const struct utxo *utxo, const u8 *key)
+static bool utxohash_eq(const struct utxo *utxo, const struct sha256 *key)
 {
-	return memcmp(&utxo->tx, key, sizeof(utxo->tx)) == 0;
+	return sha256_eq(&utxo->txid, key);
 }
 
 HTABLE_DEFINE_TYPE(struct utxo, keyof_utxo, hash_sha, utxohash_eq, utxo_map);
@@ -182,7 +187,7 @@ static void add_utxo(const tal_t *tal_ctx,
 	utxo = tal_alloc_(tal_ctx, sizeof(*utxo) + (sizeof(utxo->amount[0]) + 1)
 			  * t->output_count, false, TAL_LABEL(struct utxo, ""));
 
-	memcpy(utxo->tx, t->sha256, sizeof(utxo->tx));
+	utxo->txid = t->sha256;
 	utxo->num_outputs = t->output_count;
 	utxo->unspent_outputs = spend_count;
 	utxo->height = b->height;
@@ -204,7 +209,7 @@ static void release_utxo(struct utxo_map *utxo_map,
 {
 	struct utxo *utxo;
 
-	utxo = utxo_map_get(utxo_map, i->hash);
+	utxo = utxo_map_get(utxo_map, &i->hash);
 	if (!utxo)
 		errx(1, "Unknown utxo for "SHA_FMT, SHA_VALS(i->hash));
 
@@ -252,7 +257,7 @@ static struct file *block_file(unsigned int index)
 	if (use_mmap && f[i].mmap && xor_key)
 		xor_decode((uint8_t *)f[i].mmap, f[i].len, xor_key, XOR_KEY_SIZE);
 	else if (!use_mmap && xor_key) {
-		err(1, "Disabled mmap with non-empty blocks XOR key value is not supported.");
+		errx(1, "Disabled mmap with non-empty blocks XOR key value is not supported.");
 	}
 
 	next++;
@@ -262,15 +267,9 @@ static struct file *block_file(unsigned int index)
 }
 
 
-static bool is_zero(u8 hash[SHA256_DIGEST_LENGTH])
+static bool is_zero(const struct sha256 *hash)
 {
-	unsigned int i;
-
-	for (i = 0; i < SHA256_DIGEST_LENGTH; i++) {
-		if (hash[i] != 0)
-			return false;
-	}
-	return true;
+	return memeqzero(hash->u.u8, sizeof(hash->u.u8));
 }
 
 #define MAXU32 (0xFFFFFFFFul)
@@ -311,7 +310,7 @@ static bool set_height(struct block_map *block_map, struct block *b)
 
 	i = b;
 	do {
-		prev = block_map_get(block_map, i->bh.prev_hash);
+		prev = block_map_get(block_map, &i->bh.prev_hash);
 		if (!prev)
 			return false;
 		prev->next = i;
@@ -342,7 +341,7 @@ static s64 calculate_fees(const struct utxo_map *utxo_map,
 	for (i = 0; i < t->input_count; i++) {
 		struct utxo *utxo;
 
-		utxo = utxo_map_get(utxo_map, t->input[i].hash);
+		utxo = utxo_map_get(utxo_map, &t->input[i].hash);
 		if (!utxo)
 			errx(1, "Unknown utxo for "SHA_FMT,
 			     SHA_VALS(t->input[i].hash));
@@ -391,7 +390,7 @@ static s64 calculate_bdd(const struct utxo_map *utxo_map,
 	for (i = 0; i < t->input_count; i++) {
 		struct utxo *utxo;
 
-		utxo = utxo_map_get(utxo_map, t->input[i].hash);
+		utxo = utxo_map_get(utxo_map, &t->input[i].hash);
 		if (!utxo)
 			errx(1, "Unknown utxo for "SHA_FMT,
 			     SHA_VALS(t->input[i].hash));
@@ -441,10 +440,10 @@ static void print_format(const char *format,
 				printf("%u", b->bh.version);
 				break;
 			case 'p':
-				print_reversed_hash(b->bh.prev_hash);
+				print_reversed_hash(&b->bh.prev_hash);
 				break;
 			case 'm':
-				print_hash(b->bh.merkle_hash);
+				print_hash(&b->bh.merkle_hash);
 				break;
 			case 's':
 				printf("%u", b->bh.timestamp);
@@ -459,7 +458,7 @@ static void print_format(const char *format,
 				printf("%"PRIu64, b->bh.transaction_count);
 				break;
 			case 'h':
-				print_reversed_hash(b->sha);
+				print_reversed_hash(&b->sha);
 				break;
 			case 'N':
 				printf("%u", b->height);
@@ -476,7 +475,7 @@ static void print_format(const char *format,
 				goto bad_fmt;
 			switch (c[2]) {
 			case 'h':
-				print_reversed_hash(t->sha256);
+				print_reversed_hash(&t->sha256);
 				break;
 			case 'v':
 				printf("%u", t->version);
@@ -525,7 +524,7 @@ static void print_format(const char *format,
 				goto bad_fmt;
 			switch (c[2]) {
 			case 'h':
-				print_hash(i->hash);
+				print_hash(&i->hash);
 				break;
 			case 'i':
 				printf("%u", i->index);
@@ -548,7 +547,7 @@ static void print_format(const char *format,
 			case 'a':
 				/* Coinbase doesn't have valid input. */
 				if (txnum != 0) {
-					struct utxo *utxo = utxo_map_get(utxo_map, i->hash);
+					struct utxo *utxo = utxo_map_get(utxo_map, &i->hash);
 					printf("%"PRIu64, utxo->amount[i->index]);
 				} else
 					printf("0");
@@ -556,7 +555,7 @@ static void print_format(const char *format,
 			case 'B':
 				/* Coinbase doesn't have valid input. */
 				if (txnum != 0) {
-					struct utxo *utxo = utxo_map_get(utxo_map, i->hash);
+					struct utxo *utxo = utxo_map_get(utxo_map, &i->hash);
 					printf("%u", utxo->height);
 				} else
 					printf("0");
@@ -564,7 +563,7 @@ static void print_format(const char *format,
 			case 'T':
 				/* Coinbase doesn't have valid input. */
 				if (txnum != 0) {
-					struct utxo *utxo = utxo_map_get(utxo_map, i->hash);
+					struct utxo *utxo = utxo_map_get(utxo_map, &i->hash);
 					printf("%u", utxo->txnum);
 				} else
 					printf("-1");
@@ -572,7 +571,7 @@ static void print_format(const char *format,
 			case 'p':
 				/* Coinbase doesn't have valid input. */
 				if (txnum != 0) {
-					struct utxo *utxo = utxo_map_get(utxo_map, i->hash);
+					struct utxo *utxo = utxo_map_get(utxo_map, &i->hash);
 					printf("%u", output_types(utxo)[i->index]);
 				} else
 					printf("%u", UNKNOWN_OUTPUT);
@@ -612,7 +611,7 @@ static void print_format(const char *format,
 				goto bad_fmt;
 			switch (c[2]) {
 			case 'h':
-			        print_hash(u->tx);
+			        print_hash(&u->txid);
 			        break;
 			case 't':
 				printf("%u", u->timestamp);
@@ -654,17 +653,13 @@ bad_fmt:
 	     c);
 }
 
-static char *opt_set_hash(const char *arg, u8 *h)
+static char *opt_set_hash(const char *arg, struct sha256 *h)
 {
-	size_t i;
-	u8 hash[SHA256_DIGEST_LENGTH];
-
-	if (!hex_decode(arg, strlen(arg), hash, SHA256_DIGEST_LENGTH))
+	if (!hex_decode(arg, strlen(arg), h->u.u8, sizeof(h->u.u8)))
 		return "Bad hex string (needs 64 hex chars)";
 
 	/* Backwards endian is the Bitcoin Way */
-	for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
-		h[i] = hash[SHA256_DIGEST_LENGTH-i-1];
+	*h = reverse_hash(h);
 
 	return NULL;
 }
@@ -672,14 +667,14 @@ static char *opt_set_hash(const char *arg, u8 *h)
 static bool read_utxo_cache(const tal_t *ctx,
 			    struct utxo_map *utxo_map,
 			    const char *cachedir,
-			    const u8 *blockid)
+			    const struct sha256 *blockid)
 {
-	char blockhex[hex_str_size(SHA256_DIGEST_LENGTH)];
+	char blockhex[hex_str_size(sizeof(blockid->u.u8))];
 	char *file;
 	char *contents;
 	size_t bytes;
 
-	hex_encode(blockid, SHA256_DIGEST_LENGTH, blockhex, sizeof(blockhex));
+	hex_encode(blockid->u.u8, sizeof(blockid->u.u8), blockhex, sizeof(blockhex));
 	file = path_join(NULL, cachedir, blockhex);
 	contents = grab_file(file, file);
 	if (!contents) {
@@ -718,15 +713,15 @@ static bool read_utxo_cache(const tal_t *ctx,
 
 static void write_utxo_cache(const struct utxo_map *utxo_map,
 			     const char *cachedir,
-			     const u8 *blockid)
+			     const struct sha256 *blockid)
 {
 	char *file;
-	char blockhex[hex_str_size(SHA256_DIGEST_LENGTH)];
+	char blockhex[hex_str_size(sizeof(blockid->u.u8))];
 	struct utxo_map_iter it;
 	struct utxo *utxo;
 	int fd;
 
-	hex_encode(blockid, SHA256_DIGEST_LENGTH, blockhex, sizeof(blockhex));
+	hex_encode(blockid->u.u8, sizeof(blockid->u.u8), blockhex, sizeof(blockhex));
 	file = path_join(NULL, cachedir, blockhex);
 
 	fd = open(file, O_WRONLY|O_CREAT|O_EXCL, 0600);
@@ -751,17 +746,17 @@ static void write_utxo_cache(const struct utxo_map *utxo_map,
 static bool add_block(struct block_map *block_map, struct block *b,
 		      struct block **genesis, size_t *num_misses)
 {
-	struct block *prev, *old = block_map_get(block_map, b->sha);
+	struct block *prev, *old = block_map_get(block_map, &b->sha);
 
 	if (old) {
 		warnx("Already have "SHA_FMT" from %s %lu/%u",
 		      SHA_VALS(b->sha),
 		      block_fnames[old->filenum],
 		      old->pos, old->bh.len);
-		block_map_delkey(block_map, b->sha);
+		block_map_delkey(block_map, &b->sha);
 	}
 	block_map_add(block_map, b);
-	if (is_zero(b->bh.prev_hash)) {
+	if (is_zero(&b->bh.prev_hash)) {
 		*genesis = b;
 		b->height = 0;
 		*num_misses = 0;
@@ -769,7 +764,7 @@ static bool add_block(struct block_map *block_map, struct block *b,
 	}
 
 	/* Optimistically search for previous: blocks usually in rough order */
-	prev = block_map_get(block_map, b->bh.prev_hash);
+	prev = block_map_get(block_map, &b->bh.prev_hash);
 	if (prev) {
 		if (prev->height != -1) {
 			b->height = prev->height + 1;
@@ -856,12 +851,13 @@ int main(int argc, char *argv[])
 	bool use_regtest = false;
 	bool use_signet = false;
 	u32 netmarker;
-	u8 tip[SHA256_DIGEST_LENGTH] = { 0 },
-		start_hash[SHA256_DIGEST_LENGTH] = { 0 };
+	struct sha256 tip, start_hash;
 	unsigned int utxo_period = 144;
 	enum networks network = MAIN;
 
 	err_set_progname(argv[0]);
+	memset(&tip, 0, sizeof(tip));
+	memset(&start_hash, 0, sizeof(start_hash));
 	opt_register_noarg("-h|--help", opt_usage_and_exit,
 			   "\nValid block, transaction, input, output, and utxo format:\n"
 			   "  <literal>: unquoted\n"
@@ -948,9 +944,9 @@ int main(int argc, char *argv[])
 			 "Look for signet blocks");
 	opt_register_arg("--blockdir", opt_set_charp, NULL, &blockdir,
 			 "Block directory instead of ~/.bitcoin/[testnet3/]blocks");
-	opt_register_arg("--end-hash", opt_set_hash, NULL, tip,
+	opt_register_arg("--end-hash", opt_set_hash, NULL, &tip,
 			 "Best blockhash to use instead of longest chain.");
-	opt_register_arg("--start-hash", opt_set_hash, NULL, start_hash,
+	opt_register_arg("--start-hash", opt_set_hash, NULL, &start_hash,
 			 "Blockhash to start at instead of genesis.");
 	opt_register_arg("--start", opt_set_ulongval, NULL, &block_start,
 			 "Block number to start instead of genesis.");
@@ -1041,7 +1037,7 @@ int main(int argc, char *argv[])
 			b->filenum = i;
 			b->height = -1;
 			if (!read_bitcoin_block_header(&b->bh, f, &off,
-						       b->sha, netmarker)) {
+						       &b->sha, netmarker)) {
 				tal_free(b);
 				break;
 			}
@@ -1088,15 +1084,15 @@ check_genesis:
 	}
 
 	/* If they told us a tip, that overrides. */
-	if (!is_zero(tip)) {
-		best = block_map_get(&block_map, tip);
+	if (!is_zero(&tip)) {
+		best = block_map_get(&block_map, &tip);
 		if (!best)
 			errx(1, "Unknown --end block "SHA_FMT, SHA_VALS(tip));
 	}
 			
 	/* If they told us a start, make sure it exists. */
-	if (!is_zero(start_hash)) {
-		start = block_map_get(&block_map, start_hash);
+	if (!is_zero(&start_hash)) {
+		start = block_map_get(&block_map, &start_hash);
 		if (!start)
 			errx(1, "Unknown --start block "SHA_FMT,
 			     SHA_VALS(start_hash));
@@ -1108,7 +1104,7 @@ check_genesis:
 
 	/* Now iterate down from best, setting next pointers. */
 	next = NULL;
-	for (b = best; b; b = block_map_get(&block_map, b->bh.prev_hash)) {
+	for (b = best; b; b = block_map_get(&block_map, &b->bh.prev_hash)) {
 		b->next = next;
 		next = b;
 	}
@@ -1169,7 +1165,7 @@ check_genesis:
 
 	/* Do we have cache utxo? */
 	if (cachedir && start && needs_utxo) {
-		if (read_utxo_cache(tal_ctx, &utxo_map, cachedir, start->sha)) {
+		if (read_utxo_cache(tal_ctx, &utxo_map, cachedir, &start->sha)) {
 			needs_fee = false;
 			if (!quiet)
 				fprintf(stderr, "Found valid UTXO cache\n");
@@ -1188,7 +1184,7 @@ check_genesis:
 				if (needs_fee) {
 					/* Save cache for next time. */
 					write_utxo_cache(&utxo_map, cachedir,
-							 b->sha);
+							 &b->sha);
 					if (!quiet)
 						fprintf(stderr, "Wrote UTXO cache\n");
 				} else

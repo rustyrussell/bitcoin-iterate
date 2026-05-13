@@ -9,7 +9,6 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <inttypes.h>
-#include <openssl/bn.h>
 #include "types.h"
 #include "io.h"
 #include "dump.h"
@@ -106,6 +105,8 @@ static u64 decompress_amount(u64 x)
 	return n;
 }
 
+#if DECOMPRESS_PUBKEYS == 1
+#include <openssl/bn.h>
 /* Decompress secp256k1 point using BIGNUM arithmetic */
 static void decompress_pubkey(const u8 compressed[33], u8 uncompressed[65])
 {
@@ -147,7 +148,16 @@ static void decompress_pubkey(const u8 compressed[33], u8 uncompressed[65])
 	BN_free(x); BN_free(y); BN_free(p); BN_free(tmp); BN_free(exp);
 	BN_CTX_free(ctx);
 }
-
+#else
+static void decompress_pubkey(const u8 compressed[33], u8 uncompressed[65])
+{
+	/* Zero fill */
+	memset(uncompressed, 0, 65);
+	memcpy(uncompressed, compressed, 33);
+	uncompressed[0] = 0x04;
+}
+#endif /* DECOMPRESS_PUBKEYS */		 
+		
 /* Read and decompress script from snapshot; sets *script_len */
 static u8 *pull_script(const tal_t *ctx, struct file *f, off_t *poff,
 		       u32 *script_len)
@@ -223,7 +233,7 @@ static u8 *pull_script(const tal_t *ctx, struct file *f, off_t *poff,
 }
 
 struct utxo_entry {
-	u8 txid[32];
+	struct sha256 txid;
 	u32 vout;
 	u64 amount;
 	u32 height;
@@ -254,7 +264,7 @@ static void print_format(const char *format, const struct utxo_entry *u)
 		case 't':
 			switch (c[2]) {
 			case 'h':
-				print_reversed_hash(u->txid);
+				print_reversed_hash(&u->txid);
 				break;
 			case 'C':
 				printf("%u", u->coinbase);
@@ -369,14 +379,14 @@ int main(int argc, char *argv[])
 	 */
 	u64 i = 0;
 	while (i < coins_count) {
-		u8 txid[32];
-		pull_bytes(&f, &off, txid, 32);
+		struct sha256 txid;
+		pull_bytes(&f, &off, txid.u.u8, sizeof(txid.u.u8));
 
 		u64 out_count = pull_compactsize(&f, &off);
 
 		for (u64 j = 0; j < out_count; j++, i++) {
 			struct utxo_entry u;
-			memcpy(u.txid, txid, 32);
+			u.txid = txid;
 			u.vout = (u32)pull_compactsize(&f, &off);
 
 			u64 code = pull_core_varint(&f, &off);

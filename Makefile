@@ -1,11 +1,13 @@
 ITERATE_OBJS := iterate.o parse.o blockfiles.o io.o dump.o
 UTXOSET_OBJS := utxoset-iterate.o io.o dump.o
-CCAN_OBJS := ccan-tal.o ccan-tal-path.o ccan-tal-str.o ccan-take.o ccan-list.o ccan-str.o ccan-opt-helpers.o ccan-opt.o ccan-opt-parse.o ccan-opt-usage.o ccan-htable.o ccan-hex.o ccan-tal-grab-file.o ccan-noerr.o
+CCAN_OBJS := ccan-tal.o ccan-tal-path.o ccan-tal-str.o ccan-take.o ccan-list.o ccan-str.o ccan-opt-helpers.o ccan-opt.o ccan-opt-parse.o ccan-opt-usage.o ccan-htable.o ccan-hex.o ccan-tal-grab-file.o ccan-noerr.o ccan-crypto-sha256.o ccan-mem.o
 CCANDIR=ccan/
-CFLAGS = -O3 -flto -ggdb -I $(CCANDIR) -Wall
+# Set DECOMPRESS_PUBKEYS=1 to print p2pk outputs properly (requires OpenSSL, and -lcrypto)
+CFLAGS = -O3 -flto -ggdb -I $(CCANDIR) -Wall -DDECOMPRESS_PUBKEYS=0
+# If DECOMPRESS_PUBKEYS=1, set this:
+#LDLIBS := -lcrypto
 LDFLAGS = -O3 -flto
 #CFLAGS = -ggdb -I $(CCANDIR) -Wall
-LDLIBS := -lcrypto
 BIN_DIR := /usr/local/bin
 
 all: bitcoin-iterate utxoset-iterate doc/bitcoin-iterate.1 doc/utxoset-iterate.1
@@ -13,7 +15,7 @@ all: bitcoin-iterate utxoset-iterate doc/bitcoin-iterate.1 doc/utxoset-iterate.1
 .PHONY: install
 
 install:
-	cp bitcoin-iterate $(BIN_DIR)/bitcoin-iterate
+	cp bitcoin-iterate utxoset-iterate $(BIN_DIR)/
 
 $(CCAN_OBJS) $(ITERATE_OBJS) $(UTXOSET_OBJS): ccan/config.h
 
@@ -71,4 +73,8 @@ ccan-hex.o: $(CCANDIR)/ccan/str/hex/hex.c
 ccan-tal-grab-file.o: $(CCANDIR)/ccan/tal/grab_file/grab_file.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 ccan-noerr.o: $(CCANDIR)/ccan/noerr/noerr.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+ccan-crypto-sha256.o: $(CCANDIR)/ccan/crypto/sha256/sha256.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+ccan-mem.o: $(CCANDIR)/ccan/mem/mem.c
 	$(CC) $(CFLAGS) -c -o $@ $<
