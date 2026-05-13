@@ -1,4 +1,5 @@
 #include <ccan/err/err.h>
+#include <ccan/tal/grab_file/grab_file.h>
 #include <ccan/tal/path/path.h>
 #include <ccan/tal/str/str.h>
 #include <ccan/short_types/short_types.h>
@@ -6,6 +7,7 @@
 #include <stdio.h>
 #include <pwd.h>
 #include <dirent.h>
+#include <errno.h>
 #include "blockfiles.h"
 
 static void add_name(char ***names_p, unsigned int num, char *name)
@@ -21,9 +23,11 @@ static void add_name(char ***names_p, unsigned int num, char *name)
 	(*names_p)[num] = name;
 }
 
-char **block_filenames(tal_t *ctx, const char *path, enum networks network){
+char **block_filenames(tal_t *ctx, const char *path, enum networks network,
+		       u8 **xor_key)
+{
 	char **names = tal_arr(ctx, char *, 0);
-	char *tmp_ctx = tal_arr(ctx, char, 0);
+	char *tmp_ctx = tal_arr(ctx, char, 0), *xordatfile;
 	DIR *dir;
 	struct dirent *ent;
 
@@ -67,6 +71,18 @@ char **block_filenames(tal_t *ctx, const char *path, enum networks network){
 		num = strtol(numstr, NULL, 10);
 		add_name(&names, num, path_join(names, path, ent->d_name));
 	}
+
+	xordatfile = path_join(tmp_ctx, path, "xor.dat");
+	*xor_key = grab_file(ctx, xordatfile);
+	if (*xor_key) {
+		if (tal_bytelen(*xor_key) != XOR_KEY_SIZE + 1)
+			errx(1, "%s unexpected size %zu",
+			     xordatfile,
+			     tal_bytelen(*xor_key) - 1);
+	} else if (errno != ENOENT)
+		err(1, "Cannot open %s: %s", xordatfile, strerror(errno));
+
 	tal_free(tmp_ctx);
+	
 	return names;
 }
